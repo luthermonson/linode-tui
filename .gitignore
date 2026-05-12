@@ -1,0 +1,28 @@
+# Binaries
+/linode-tui
+/linode-tui.exe
+/linode-tui.exe~
+/dist/
+/bin/
+
+# Local agent / memory state
+.claude/
+
+# Go
+*.test
+*.out
+coverage.*
+vendor/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local config that may contain secrets
+config.local.yaml
+*.token
+.env
+.env.local

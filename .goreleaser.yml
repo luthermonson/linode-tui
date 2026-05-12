@@ -1,0 +1,88 @@
+version: 2
+
+project_name: linode-tui
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: linode-tui
+    main: ./cmd/linode-tui
+    binary: linode-tui
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    name_template: >-
+      {{- .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE*
+      - README*
+      - AGENTS*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+    documents:
+      - "${artifact}.spdx.json"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: linode
+    name: tui
+  draft: true
+  prerelease: auto
+
+brews:
+  - repository:
+      owner: linode
+      name: homebrew-tap
+    homepage: https://github.com/linode/tui
+    description: A k9s-style TUI for the Linode API
+    license: MIT
+    install: |
+      bin.install "linode-tui"
+    test: |
+      system "#{bin}/linode-tui", "version"

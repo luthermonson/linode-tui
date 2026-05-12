@@ -1,0 +1,35 @@
+# https://pre-commit.com — install hooks with: pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -l -s -d .
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: govet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: gotest
+        name: go test -short
+        entry: go test -short ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+        stages: [pre-push]
