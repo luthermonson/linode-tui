@@ -16,12 +16,7 @@ A comprehensive reference for `linode-tui`. Quick links:
 
 ## Two surfaces, one binary
 
-`linode-tui` is both:
-
-1. An **interactive TUI** (the default when invoked with no subcommand) — built on Bubble Tea, k9s-style command palette via `:`.
-2. A **CLI toolbox** — `linode-tui <subcommand>` for the headless gestures: validating config, dumping a layout to YAML, grepping the audit log, pre-pinning a layout URL, running health checks in CI, etc.
-
-Both surfaces share the same config file, the same audit log, the same layout cache, and the same per-account state. Verbs that exist in both places (e.g. `:bookmark export` and `linode-tui bookmark export`) are functionally identical.
+`linode-tui` is an **interactive TUI** — built on Bubble Tea, k9s-style command palette via `:`. Utility gestures (config inspection, audit log, layouts, bookmarks, cache) live behind palette commands inside the TUI; the headless CLI surface is deliberately limited to `doctor`, `version`, and shell completion.
 
 ---
 
@@ -29,33 +24,15 @@ Both surfaces share the same config file, the same audit log, the same layout ca
 
 Default path: `~/.config/linode-tui/config.yaml` (`%AppData%\linode-tui\config.yaml` on Windows). Override with `--config <path>` on any subcommand.
 
-Inspect what's currently in effect:
+Inspect what's currently in effect (in the TUI):
 
-```bash
-linode-tui config path           # just the resolved path
-linode-tui config show           # full YAML (Token fields redacted)
-linode-tui config show --no-redact   # full YAML with real tokens
-linode-tui config edit           # open in $VISUAL / $EDITOR / vi
+```
+:config path        # just the resolved path
+:config show        # full YAML (Token fields redacted)
 ```
 
-Validate it:
-
-```bash
-linode-tui validate-config                          # strict-parse + sanity warnings
-linode-tui validate-config --strict                 # non-zero exit on any warning
-linode-tui validate-config --check theme            # only run the theme check
-linode-tui validate-config --check ?                # list available check names
-linode-tui validate-config --check ? --json         # JSON: {"checks":[…]}
-```
-
-Apply preset defaults without launching the TUI:
-
-```bash
-linode-tui defaults                       # show current effective values
-linode-tui defaults theme dracula         # set active_theme
-linode-tui defaults refresh               # write the per-view refresh preset
-linode-tui defaults refresh --dry-run     # preview without writing
-```
+Validate it with `:validate`, or headlessly via `linode-tui doctor` (config
+validity is one of its check groups).
 
 ### Key config fields
 
@@ -119,9 +96,10 @@ When a listView decides how often to tick:
 
 ```bash
 linode-tui                     # launch
-linode-tui ui --layout dev     # launch with a named saved layout
-linode-tui ui --no-layout      # launch without the auto-loaded default layout
-linode-tui ui --read-only      # session-wide block on mutating actions
+linode-tui --view lke          # open directly into a resource view
+linode-tui --layout dev        # launch with a named saved layout
+linode-tui --no-layout         # launch without the auto-loaded default layout
+linode-tui --read-only         # session-wide block on mutating actions
 ```
 
 ### Key bindings
@@ -261,68 +239,13 @@ A layout = which view goes in each of up to 4 panes plus the split ratios. You c
 
 ## CLI subcommands
 
-### Headless reads
+The CLI surface is intentionally tiny — everything else lives behind the `:`
+command palette in the TUI. Headless reads (list/get with table/csv/json
+output) are out of scope; the official
+[linode-cli](https://github.com/linode/linode-cli) covers that ground.
 
 ```bash
-linode-tui list <resource> [id]            # table | csv | json output
-linode-tui list linodes --watch            # poll every 2s; ctrl+c exits cleanly
-linode-tui list linodes 12345 --format json
-linode-tui open <resource> [id]            # JSON of one row (also accepts --csv)
-```
-
-### Audit
-
-```bash
-linode-tui audit                                       # alias for tail
-linode-tui audit tail -n 50 --follow                   # journalctl-style
-linode-tui audit tail --account prod                   # filter by account
-linode-tui audit recent 10                             # banner-style; colored in TTY
-linode-tui audit recent 10 --err --no-marker
-linode-tui audit grep delete                           # substring across fields
-linode-tui audit grep delete --err --account prod --since 24h --json
-linode-tui audit count                                 # just the total
-linode-tui audit purge --older-than 720h               # prune (30d)
-linode-tui audit clear --i-know-what-im-doing          # wipe everything
-```
-
-### Layouts
-
-```bash
-linode-tui layout list
-linode-tui layout cat dev                              # YAML
-linode-tui layout cat dev --json                       # JSON
-linode-tui layout cat dev --raw                        # only the layout body
-linode-tui layout rename old new
-linode-tui layout delete old
-linode-tui layout diff a b                             # field-by-field
-linode-tui layout fingerprint dev                      # sha256 only
-linode-tui layout pin dev https://example.com/dev.yaml # adds ?sha256=…
-linode-tui layout export-all ./layouts                 # one YAML per layout
-linode-tui layout import-all ./layouts [--overwrite]
-linode-tui layout import-from <url> [name]             # validates sha256 if pinned
-```
-
-### Bookmarks
-
-```bash
-linode-tui bookmark list
-linode-tui bookmark export ~/bm.yaml
-linode-tui bookmark import ~/bm.yaml [--merge]
-linode-tui bookmark scope                              # show
-linode-tui bookmark scope global|account               # set
-linode-tui bookmark migrate [--account <name>]         # move global → account
-```
-
-### Cache
-
-```bash
-linode-tui cache size                                  # subdir sizes + total
-linode-tui cache prune <subdir|all> --i-know-what-im-doing
-```
-
-### Doctor
-
-```bash
+linode-tui version
 linode-tui doctor                                      # all checks
 linode-tui doctor --strict                             # exit non-zero on optional warnings
 linode-tui doctor --quiet                              # hide successes
@@ -330,38 +253,16 @@ linode-tui doctor --section token --section op         # filter by check name
 linode-tui doctor --group tools --group runtime        # filter by group
 linode-tui doctor --json                               # machine-readable
 linode-tui doctor --watch 5s                           # repeat; ctrl+c exits
-linode-tui doctor --watch 5s --json                    # JSON-Lines stream
 linode-tui doctor --fix                                # remove orphan *.tmp files
-linode-tui doctor --no-color                           # disable ANSI (also: NO_COLOR=1)
+linode-tui completion bash|zsh|fish|pwsh               # print completion script
+linode-tui install-completion [shell]                  # write it to the standard location
 ```
 
-### Config
+In-TUI equivalents for the old subcommands: `:audit`, `:layout`, `:bookmark`,
+`:cache`, `:config`, `:validate`, `:replay-last`, `:replay-from`, `:stats`.
 
-```bash
-linode-tui config path
-linode-tui config show [--no-redact]
-linode-tui config edit
-linode-tui validate-config [--strict] [--quiet] [--json] [--check <name>]
-```
-
-### Defaults
-
-```bash
-linode-tui defaults                                    # current effective values
-linode-tui defaults theme <name>
-linode-tui defaults refresh [--dry-run]
-```
-
-### Other
-
-```bash
-linode-tui clear-account --account dev                 # dry-run
-linode-tui clear-account --account dev --execute --exclude lke,instances
-linode-tui import-cli                                  # import settings from linode-cli config
-linode-tui completion bash|zsh|fish|pwsh
-linode-tui replay-last [--execute]
-linode-tui replay-from <date> [--kind <kind>] [--execute]
-```
+> First run with no token? If a linode-cli config exists at
+> `~/.config/linode-cli`, the TUI offers to import its accounts automatically.
 
 ---
 
@@ -383,9 +284,9 @@ Scope: global by default. When you switch to per-account scope (`:bookmark scope
 
 A named layout captures up to 4 pane assignments + split ratios. Use them as workspace templates ("the prod dashboard", "the on-call view"). Share them by serving the YAML over HTTPS with `?sha256=<digest>` pinned in the URL:
 
-1. `linode-tui layout fingerprint dev` → get the sha256
+1. `:layout fingerprint dev` → get the sha256
 2. Append to your URL: `https://example.com/dev.yaml?sha256=<digest>`
-3. Recipient runs `linode-tui layout import-from <url>` — verified before save
+3. Recipient runs `:layout import-from <url>` — verified before save
 
 A digest is persisted (per-account and globally) so a re-fetch from an unpinned URL warns when upstream changed.
 
@@ -398,13 +299,13 @@ Every mutating action — create, delete, configure, layout edit, bookmark move,
 - Surfaces a one-line "recent: …" banner at startup with the last 3 entries colored by age/status
 - Powers `ctrl+y` (replay-last), `:undo`, `:replay-from <date>`, and the watchlist drift markers
 
-Useful gestures:
+Useful gestures (in the TUI):
 
-```bash
-linode-tui audit grep <action> --err --since 7d        # what failed last week
-linode-tui audit grep <substring> --account prod       # what touched prod
-linode-tui replay-last --execute                       # auto-undo last create
-linode-tui replay-from 2026-04-01 --kind instances --execute
+```
+:audit grep <substring> --err          # what failed recently
+:audit grep <substring> account=prod   # what touched prod
+:replay-last execute                   # auto-undo last create
+:replay-from 2026-04-01 execute
 ```
 
 ---
@@ -439,14 +340,12 @@ Each failed/optional check carries an inline `Suggestion` string in both the CLI
 | `~/.config/linode-tui/config.yaml` | All configuration |
 | `~/.cache/linode-tui/audit.log` | Mutating-action audit log (rotates at 2 MiB) |
 | `~/.cache/linode-tui/audit.log.1` | Previous generation after rotation |
-| `~/.cache/linode-tui/layouts/<name>.yaml` | Cached YAML from each `layout import-from` |
+| `~/.cache/linode-tui/layouts/<name>.yaml` | Cached YAML from each `:layout import-from` |
 | `~/.cache/linode-tui/snapshots/<kind>/<id>/` | Resource snapshots per bookmark (max 10 versions) |
 | `~/.cache/linode-tui/debug.log` | Debug log when `--debug` is set |
 | `~/.cache/linode-tui/stats.json` | Persisted session counters (only when `stats_enabled: true`) |
 
-Inspect: `linode-tui cache size` or `:cache size`.
-Prune one slice: `linode-tui cache prune layouts --i-know-what-im-doing` or `:cache prune layouts`.
-Wipe everything: `linode-tui cache prune all --i-know-what-im-doing` or `:cache prune all`.
+Inspect: `:cache size`. Prune one slice: `:cache prune layouts`. Wipe everything: `:cache prune all` (typed confirm).
 
 ---
 
@@ -498,33 +397,35 @@ Then every refresh, the watchlist Δ column lights up when the live JSON differs
 ### "I want my CI to fail if config is broken"
 
 ```bash
-linode-tui validate-config --strict
+linode-tui doctor --strict --quiet
 linode-tui doctor --section token --strict --quiet
 ```
 
-### "Run all the prod-touching audits and pipe them to a dashboard"
+### "Watch health checks on a dashboard"
 
 ```bash
-linode-tui audit tail --account prod --follow --json | your-ingester
 linode-tui doctor --watch 30s --json --no-color | your-dashboard
 ```
 
 ### "Share a layout with my teammates"
 
-```bash
-# you:
-linode-tui layout export-all ./layouts
+```
+# you (in the TUI):
+:layout export-all ./layouts
 # upload layouts/dev.yaml somewhere over HTTPS
-linode-tui layout pin dev https://example.com/layouts/dev.yaml
+:layout pin dev https://example.com/layouts/dev.yaml
 # → outputs: https://example.com/layouts/dev.yaml?sha256=…
 
 # them:
-linode-tui layout import-from "https://example.com/layouts/dev.yaml?sha256=…"
+:layout import-from https://example.com/layouts/dev.yaml?sha256=…
 ```
 
 ### "Quickly wipe a dev account before another e2e run"
 
-```bash
-linode-tui clear-account --account dev --execute
-# refuses anything containing "prod" unless --i-know-what-im-doing
+In the TUI, with the dev account active:
+
+```
+:clear-account dry-run    # preview
+:clear-account            # typed-username confirm, then deletes everything
+# refuses any account whose name contains "prod"
 ```

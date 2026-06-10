@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/linode/tui/internal/buildinfo"
-	"github.com/linode/tui/internal/cli"
+	"github.com/linode/tui/buildinfo"
+	"github.com/linode/tui/cli"
 )
 
 var (

@@ -16,7 +16,7 @@ A k9s-style TUI for the [Linode API](https://www.linode.com/docs/api/). Resource
 | Styling         | `github.com/charmbracelet/lipgloss`                                       |
 | Forms           | `github.com/charmbracelet/huh`                                            |
 | Linode API      | `github.com/linode/linodego`                                              |
-| Config          | YAML at `~/.config/linode-tui/config.yaml` (see `internal/config`)         |
+| Config          | YAML at `~/.config/linode-tui/config.yaml` (see `config`)         |
 | Secrets         | 1Password `op` CLI (preferred) or `LINODE_TOKEN` env var                  |
 
 Use `urfave/cli/v3` (not cobra). Use `bubbletea`'s message-driven model — no goroutines reaching directly into the UI tree; emit `tea.Cmd`s.
@@ -24,13 +24,13 @@ Use `urfave/cli/v3` (not cobra). Use `bubbletea`'s message-driven model — no g
 ## Layout
 
 ```
-cmd/linode-tui/        # urfave entrypoint; just calls into internal/cli
-internal/cli/          # urfave app, flags, subcommands
-internal/config/       # YAML config, defaults, theme/account/tool persistence
-internal/linode/       # linodego client wrapper, pagination, rate-limit handling
-internal/onepassword/  # `op` CLI shell-out for token resolution
-internal/tools/        # external exec (k9s, lazysql, …): resolve, install, run
-internal/tui/
+cmd/linode-tui/        # urfave entrypoint; just calls into cli
+cli/          # urfave app, flags, subcommands
+config/       # YAML config, defaults, theme/account/tool persistence
+linode/       # linodego client wrapper, pagination, rate-limit handling
+onepassword/  # `op` CLI shell-out for token resolution
+tools/        # external exec (k9s, lazysql, …): resolve, install, run
+tui/
   app.go               # root Bubble Tea model: header + body + footer + cmdbar
   keys/                # global keymap, per-view keymap composition
   theme/               # lipgloss styles for light/dark/dracula/solarized-light
@@ -43,15 +43,15 @@ internal/tui/
     ...
 ```
 
-Keep each resource view in one file under `internal/tui/views/`. Each view implements a small interface (see `registry.go`).
+Keep each resource view in one file under `tui/views/`. Each view implements a small interface (see `registry.go`).
 
 ## Conventions
 
 - **Go**: target the toolchain in `go.mod`. Run `gofmt`/`goimports` before committing. `go vet ./...` should be clean.
-- **Errors**: bubble them up; never `log.Fatal` outside of `cmd/`. Render errors in a status-bar toast — see `internal/tui/app.go`.
+- **Errors**: bubble them up; never `log.Fatal` outside of `cmd/`. Render errors in a status-bar toast — see `tui/app.go`.
 - **Comments**: only when WHY isn't obvious from the code. Don't narrate.
 - **Tests**: prefer integration tests against linodego's `httptest` fixtures over heavy mocking. Skip live API tests by default; opt in with `LINODE_TUI_LIVE=1`.
-- **Theming**: never hard-code colors in views. Pull every style from `internal/tui/theme`. Themes hot-swap via `:theme <name>` — views must rebuild styles from the current theme on each render rather than caching.
+- **Theming**: never hard-code colors in views. Pull every style from `tui/theme`. Themes hot-swap via `:theme <name>` — views must rebuild styles from the current theme on each render rather than caching.
 - **Refresh**: views accept a refresh interval (default 2s) and emit a `tea.Tick` themselves. Don't spawn raw goroutines; use `tea.Cmd`.
 - **Pagination**: `linodego` auto-walks all pages when `ListXxx(ctx, nil)` is called (see `handlePaginatedResults` in `request_helpers.go`). Don't add page loops to view listers — they already see every page. If you need a specific page, pass a `*linodego.ListOptions` with `PageOptions.Page` set.
 - **Retries**: `linodego.NewClient` calls `SetRetries()` by default — it retries 429s, 503s, Linode-busy responses, request timeouts, GOAWAY frames, and NGINX transient errors with exponential backoff. Don't add an outer retry loop. Add additional conditions via `c.Raw().AddRetryCondition(...)` if needed.
@@ -59,11 +59,11 @@ Keep each resource view in one file under `internal/tui/views/`. Each view imple
 - **Watchlist freshness**: `:watchlist` refetches every `cfg.Refresh` (2s by default), so a bookmark toggled in another view shows up on the next tick. Forcing an immediate refresh requires a global event bus — punted; it'd add coupling for a ~2s win.
 - **Mutations**: destructive actions (delete, reboot, power-off, resize, rebuild) MUST go through a confirm modal. No exceptions — even `:delete-everything` style helpers.
 - **Secrets**: never write resolved tokens to disk. The config stores 1Password references (`op://Vault/Item/credential`) or, for testing, a literal token. Resolved tokens live only in memory.
-- **External tools**: any subprocess goes through `internal/tools`. Don't `exec.Command` from view code.
+- **External tools**: any subprocess goes through `tools`. Don't `exec.Command` from view code.
 
 ## Config schema
 
-Source of truth is `internal/config/config.go`. High-level shape:
+Source of truth is `config/config.go`. High-level shape:
 
 ```yaml
 default_account: dev
@@ -94,7 +94,7 @@ tools:
     auto_install: true
 ```
 
-Templating uses Go's `text/template`. Variables passed in depend on the tool — see `internal/tools/runner.go` for the per-tool context structs.
+Templating uses Go's `text/template`. Variables passed in depend on the tool — see `tools/runner.go` for the per-tool context structs.
 
 ## CLI surface
 
@@ -106,17 +106,17 @@ No headless `list`/`get` subcommands — the [official linode-cli](https://githu
 
 ## How to add a new resource view
 
-1. Create `internal/tui/views/<resource>.go`.
+1. Create `tui/views/<resource>.go`.
 2. Implement the `View` interface (`Init`, `Update`, `View`, `KeyMap`, `Title`).
-3. Register in `internal/tui/views/registry.go` with name + aliases (e.g. `instances`, `linodes`, `inst`, `li`).
+3. Register in `tui/views/registry.go` with name + aliases (e.g. `instances`, `linodes`, `inst`, `li`).
 4. Add hotkeys to the per-view keymap. Re-use shared keys (`enter`, `/`, `?`, `esc`) — don't redefine them.
-5. If the view supports mutations, wire each through `huh` confirm forms in `internal/tui/views/<resource>_actions.go`.
+5. If the view supports mutations, wire each through `huh` confirm forms in `tui/views/<resource>_actions.go`.
 6. Test list pagination with at least 200 fake records to exercise the `bubbles/table` virtualization.
 
 ## How to add a new external tool
 
-1. Add the default entry to `internal/config/default.go`.
-2. If `auto_install: true` is supported, add a release fetcher in `internal/tools/install/`.
+1. Add the default entry to `config/default.go`.
+2. If `auto_install: true` is supported, add a release fetcher in `tools/install/`.
 3. Define the per-tool context struct (what `{{.Kubeconfig}}` / `{{.DSN}}` resolve to) and surface it from the view that invokes the tool.
 4. Document the new tool in this file's tools list.
 

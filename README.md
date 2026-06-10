@@ -1,14 +1,6 @@
 # linode-tui
 
-```
-  _ _                 _                  _         _
- | (_)_ __   ___   __| | ___        ___| |_ _   _(_)
- | | | '_ \ / _ \ / _` |/ _ \_____ / __| __| | | | |
- | | | | | | (_) | (_| |  __/_____| (__| |_| |_| | |
- |_|_|_| |_|\___/ \__,_|\___|      \___|\__|\__,_|_|
-```
-
-A k9s-style terminal UI for the [Linode API](https://www.linode.com/docs/api/). Resource views are reached through a `:` command palette, filtered with `/`, and acted on with contextual hot-keys.
+A [k9s](https://k9scli.io/)-inspired terminal UI for the [Linode API](https://www.linode.com/docs/api/). Resource views are reached through a `:` command palette, filtered with `/`, and acted on with contextual hot-keys.
 
 Built on Bubble Tea + linodego + urfave/cli/v3.
 
@@ -46,7 +38,7 @@ Built on Bubble Tea + linodego + urfave/cli/v3.
 - **Saved layouts** — capture pane shapes with `:layout save <name>`, share them as `?sha256=…` pinned URLs, and auto-load a `default` layout on launch
 - **Audit log** — every mutating action gets a JSON line in `~/.cache/linode-tui/audit.log`; powers `ctrl+y` replay-last, `:undo`, and the "recent: …" startup banner
 - **`doctor`** — health checks (config / tools / runtime / layout) with `--watch`, `--json`, `--no-color`, and inline remediation hints
-- **`clear-account` utility** to wipe dev/e2e accounts (dry-run by default, refuses `prod*` without an override flag)
+- **`:clear-account` utility** to wipe dev/e2e accounts (typed-username confirm, dry-run preview, refuses `prod*` accounts)
 
 See **[docs/USAGE.md](docs/USAGE.md)** for the full reference — every command-bar verb, every CLI subcommand, the audit/bookmark/layout workflows, and recipes.
 
@@ -200,36 +192,25 @@ A small cross-section — see [docs/USAGE.md](docs/USAGE.md) for the full list.
 
 ## CLI subcommands
 
-The binary doubles as a headless CLI. See [docs/USAGE.md](docs/USAGE.md#cli-subcommands) for the full reference.
+The CLI surface is intentionally tiny — utility functionality lives behind the `:` command palette in the TUI. See [docs/USAGE.md](docs/USAGE.md#cli-subcommands).
 
 | Command | What it does |
 |---|---|
-| `linode-tui list <resource> [id]` | Table/CSV/JSON output; `--watch` for polling |
-| `linode-tui open <resource> [id]` | JSON / CSV of one row |
+| `linode-tui` | Launch the TUI (`--view`, `--layout`, `--pane`, `--read-only`, …) |
 | `linode-tui doctor` | Health checks: config, tools, runtime, layout |
-| `linode-tui validate-config` | Strict parse + sanity warnings |
-| `linode-tui config show\|edit\|path` | Inspect config (Token redacted in `show`) |
-| `linode-tui defaults theme\|refresh` | Apply preset values |
-| `linode-tui audit tail\|grep\|recent\|purge\|clear\|count` | Audit log gestures |
-| `linode-tui layout cat\|diff\|pin\|export-all\|import-all\|fingerprint` | Saved-layout gestures |
-| `linode-tui bookmark list\|export\|import\|migrate\|scope` | Bookmark gestures |
-| `linode-tui cache size\|prune` | Inspect / trim the cache dir |
-| `linode-tui clear-account` | Wipe a dev/e2e account (dry-run default) |
-| `linode-tui import-cli` | Pull settings from `linode-cli` config |
-| `linode-tui replay-last` / `replay-from` | Re-execute past audit entries |
-| `linode-tui completion bash\|zsh\|fish\|pwsh` | Shell completion |
+| `linode-tui version` | Print version info |
+| `linode-tui completion` / `install-completion` | Shell completion |
 
-## `clear-account` utility
+## `:clear-account` utility
 
-Bulk wipes a Linode account. Intended for dev/e2e accounts that need periodic resets.
+Bulk wipes the active Linode account from inside the TUI. Intended for dev/e2e accounts that need periodic resets.
 
-```bash
-linode-tui clear-account --account dev               # dry-run (default)
-linode-tui clear-account --account dev --execute     # actually delete
-linode-tui clear-account --account dev --execute --exclude lke,instances
+```
+:clear-account dry-run    # preview what would be deleted (no confirmation)
+:clear-account            # type your username in the confirm popup to execute
 ```
 
-Refuses any account whose name contains `prod` unless you pass `--i-know-what-im-doing`. Deletes in dependency-aware order; public images and non-empty buckets are skipped automatically.
+Refuses any account whose name contains `prod`. Deletes in dependency-aware order; public images and non-empty buckets are skipped automatically.
 
 ## Use as a linode-cli plugin
 
@@ -284,13 +265,13 @@ goreleaser release --snapshot --clean   # dry run (writes to ./dist)
 
 ```
 cmd/linode-tui/        urfave entrypoint
-internal/cli/          CLI commands (default = TUI, clear-account, version, completion)
-internal/config/       YAML config: accounts, themes, refresh, tools
-internal/linode/       linodego wrapper + token resolution (env > flag > account.Token > op_ref)
-internal/onepassword/  `op` CLI shell-out
-internal/tools/        external exec (k9s, lazysql): release registry, download, sha256, extract
-internal/tui/          Bubble Tea root model, modals, subforms
-internal/tui/views/    one file per resource view, generic listView[T] framework
+cli/          CLI commands (default = TUI, version, completion)
+config/       YAML config: accounts, themes, refresh, tools
+linode/       linodego wrapper + token resolution (env > flag > account.Token > op_ref)
+onepassword/  `op` CLI shell-out
+tools/        external exec (k9s, lazysql): release registry, download, sha256, extract
+tui/          Bubble Tea root model, modals, subforms
+tui/views/    one file per resource view, generic listView[T] framework
 ```
 
 See `AGENTS.md` for the architecture overview written for automated coding agents (and humans curious about conventions).
