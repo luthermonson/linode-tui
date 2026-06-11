@@ -322,8 +322,12 @@ func activeTheme(cfg *config.Config) string {
 
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.cmd.Init(), m.spinner.Tick, m.resolveProfileCmd()}
-	if m.current != nil {
-		cmds = append(cmds, m.current.Init())
+	// Init every live pane, not just the primary: panes restored from
+	// cfg.LastSplit at startup otherwise never fire their first fetch.
+	for _, v := range []views.View{m.current, m.secondary, m.tertiary, m.quaternary} {
+		if v != nil {
+			cmds = append(cmds, v.Init())
+		}
 	}
 	return tea.Batch(cmds...)
 }
