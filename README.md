@@ -223,8 +223,8 @@ linode() {
 }
 ```
 
-Now `linode tui`, `linode tui open lke 12345`, and `linode tui list linodes` all
-route through this binary while the rest of `linode-cli` keeps working as
+Now `linode tui`, `linode tui --view lke --focus 12345`, and `linode tui doctor`
+all route through this binary while the rest of `linode-cli` keeps working as
 normal. For fish:
 
 ```fish
