@@ -61,7 +61,7 @@ func Append(e Entry) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := json.Marshal(e)
 	if err != nil {
 		return

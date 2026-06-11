@@ -195,7 +195,7 @@ func (m *createLinode) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *createLinode) maybeBuildForm() tea.Cmd {
-	if !(m.gotReg && m.gotTyp && m.gotImg && m.gotSSH) {
+	if !m.gotReg || !m.gotTyp || !m.gotImg || !m.gotSSH {
 		return nil
 	}
 	regionOpts := make([]huh.Option[string], 0, len(m.regions))

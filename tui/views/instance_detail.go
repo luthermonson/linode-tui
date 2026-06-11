@@ -489,7 +489,7 @@ func (m *instanceDetail) renderBackups() string {
 		return "  (no backup data — check `backups:read_only` scope)\n"
 	}
 	var b strings.Builder
-	if bks.Automatic != nil && len(bks.Automatic) > 0 {
+	if len(bks.Automatic) > 0 {
 		b.WriteString("  Automatic Backups\n  " + strings.Repeat("─", 40) + "\n")
 		for _, bk := range bks.Automatic {
 			created := ""
@@ -807,68 +807,6 @@ func bucketValues(values []float64, width int) []float64 {
 		out[cell] = sum / float64(hi-lo)
 	}
 	return out
-}
-
-// renderSparkline turns a series of values into a single line of unicode
-// block characters. Width controls how many cells to render — values are
-// bucketed if there are more samples than cells. Baseline is 0 so the
-// height of each bar corresponds to the absolute value (not min-max scale).
-func renderSparkline(values []float64, width int) string {
-	if len(values) == 0 || width <= 0 {
-		return ""
-	}
-	// Bucket to width cells. Each cell is the mean of its bucket.
-	buckets := make([]float64, width)
-	if len(values) <= width {
-		// Stretch: pad the left with zeros so the recent samples land on
-		// the right edge (most readable).
-		offset := width - len(values)
-		for i, v := range values {
-			buckets[offset+i] = v
-		}
-	} else {
-		samplesPerCell := float64(len(values)) / float64(width)
-		for cell := 0; cell < width; cell++ {
-			lo := int(float64(cell) * samplesPerCell)
-			hi := int(float64(cell+1) * samplesPerCell)
-			if hi > len(values) {
-				hi = len(values)
-			}
-			if lo >= hi {
-				buckets[cell] = values[lo]
-				continue
-			}
-			var sum float64
-			for _, v := range values[lo:hi] {
-				sum += v
-			}
-			buckets[cell] = sum / float64(hi-lo)
-		}
-	}
-	var maxV float64
-	for _, v := range buckets {
-		if v > maxV {
-			maxV = v
-		}
-	}
-	if maxV == 0 {
-		// All zeros — render a flat baseline.
-		return strings.Repeat("▁", width)
-	}
-	// 8-level unicode block ramp.
-	levels := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
-	var b strings.Builder
-	for _, v := range buckets {
-		idx := int((v / maxV) * float64(len(levels)-1))
-		if idx < 0 {
-			idx = 0
-		}
-		if idx >= len(levels) {
-			idx = len(levels) - 1
-		}
-		b.WriteRune(levels[idx])
-	}
-	return b.String()
 }
 
 func stats(values []float64) (minV, maxV, cur, avg float64) {

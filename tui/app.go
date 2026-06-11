@@ -1567,8 +1567,8 @@ func (m model) headerView() string {
 	// LINODE_TOKEN with no named account). Falls back to the account
 	// name otherwise.
 	label := ""
-	switch acct := m.cfg.DefaultAccount; {
-	case acct == "__cli__" || acct == "":
+	switch acct := m.cfg.DefaultAccount; acct {
+	case "__cli__", "":
 		if m.username != "" {
 			label = m.username
 		}
@@ -1726,7 +1726,7 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 					b.WriteString(line + "\n")
 				}
 			}
-			b.WriteString(fmt.Sprintf("\nactive (global): %s\n", m.cfg.ActiveTheme))
+			fmt.Fprintf(&b, "\nactive (global): %s\n", m.cfg.ActiveTheme)
 			if len(m.cfg.Accounts) > 0 {
 				b.WriteString("\nper-account overrides:\n")
 				names := make([]string, 0, len(m.cfg.Accounts))
@@ -1744,9 +1744,9 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 						marker = " (active)"
 					}
 					if override == "" {
-						b.WriteString(fmt.Sprintf("  %s%s: (inherits global)\n", n, marker))
+						fmt.Fprintf(&b, "  %s%s: (inherits global)\n", n, marker)
 					} else {
-						b.WriteString(fmt.Sprintf("  %s%s: %s\n", n, marker, override))
+						fmt.Fprintf(&b, "  %s%s: %s\n", n, marker, override)
 					}
 				}
 			}

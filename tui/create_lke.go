@@ -139,7 +139,7 @@ func (m *createLKE) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *createLKE) maybeBuildForm() tea.Cmd {
-	if !(m.gotReg && m.gotTyp && m.gotVer) {
+	if !m.gotReg || !m.gotTyp || !m.gotVer {
 		return nil
 	}
 	regionOpts := make([]huh.Option[string], 0, len(m.regions))

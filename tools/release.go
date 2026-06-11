@@ -66,7 +66,7 @@ func k9sReleaser(goos, goarch string) (Releaser, error) {
 	if !ok {
 		return Releaser{}, fmt.Errorf("k9s: unsupported OS %s", goos)
 	}
-	if !(goarch == "amd64" || goarch == "arm64") {
+	if goarch != "amd64" && goarch != "arm64" {
 		return Releaser{}, fmt.Errorf("k9s: unsupported arch %s", goarch)
 	}
 	ext := "tar.gz"

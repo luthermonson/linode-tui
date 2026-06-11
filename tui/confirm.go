@@ -21,10 +21,6 @@ type confirmModal struct {
 	destructive bool
 }
 
-func newConfirmModal(prompt string, onYes tea.Cmd) *confirmModal {
-	return newConfirmModalWithTheme(prompt, onYes, theme.Theme{})
-}
-
 func newConfirmModalWithTheme(prompt string, onYes tea.Cmd, th theme.Theme) *confirmModal {
 	m := &confirmModal{
 		onYes:       onYes,
