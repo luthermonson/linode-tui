@@ -13,7 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/linode/tui/config"
+	"github.com/luthermonson/linode-tui/config"
 )
 
 type Kind string

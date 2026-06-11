@@ -10,7 +10,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"gopkg.in/ini.v1"
 
-	"github.com/linode/tui/config"
+	"github.com/luthermonson/linode-tui/config"
 )
 
 // maybeImportLinodeCLI is the first-run fallback: when no token resolves but

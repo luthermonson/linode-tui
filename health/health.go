@@ -13,10 +13,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/linode/tui/audit"
-	"github.com/linode/tui/cache"
-	"github.com/linode/tui/config"
-	"github.com/linode/tui/linode"
+	"github.com/luthermonson/linode-tui/audit"
+	"github.com/luthermonson/linode-tui/cache"
+	"github.com/luthermonson/linode-tui/config"
+	"github.com/luthermonson/linode-tui/linode"
 )
 
 // Result is one health check outcome.

@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/linode/tui/tui/theme"
+	"github.com/luthermonson/linode-tui/tui/theme"
 )
 
 type detailModal struct {

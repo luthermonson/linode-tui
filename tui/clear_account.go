@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/linode/tui/linode"
+	"github.com/luthermonson/linode-tui/linode"
 )
 
 type clearAccountDoneMsg struct {

@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/linode/linodego/v2"
 
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tools"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tools"
 )
 
 func init() {

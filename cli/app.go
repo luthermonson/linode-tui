@@ -11,9 +11,9 @@ import (
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/linode/tui/config"
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tui"
+	"github.com/luthermonson/linode-tui/config"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tui"
 )
 
 func NewApp(version, commit string) *cli.Command {

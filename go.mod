@@ -1,4 +1,4 @@
-module github.com/linode/tui
+module github.com/luthermonson/linode-tui
 
 go 1.26
 

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linode/tui/config"
+	"github.com/luthermonson/linode-tui/config"
 )
 
 // ProgressFn is called periodically during asset download with the byte

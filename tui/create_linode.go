@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/linode/linodego/v2"
 
-	"github.com/linode/tui/audit"
-	"github.com/linode/tui/config"
-	"github.com/linode/tui/linode"
+	"github.com/luthermonson/linode-tui/audit"
+	"github.com/luthermonson/linode-tui/config"
+	"github.com/luthermonson/linode-tui/linode"
 )
 
 type createPhase int

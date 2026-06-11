@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/linode/linodego/v2"
 
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tui/theme"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tui/theme"
 )
 
 // resourceJSON returns the JSON-indented body of a single resource by ID.

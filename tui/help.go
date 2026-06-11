@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/linode/tui/tui/theme"
-	"github.com/linode/tui/tui/views"
+	"github.com/luthermonson/linode-tui/tui/theme"
+	"github.com/luthermonson/linode-tui/tui/views"
 )
 
 func renderHelp(th theme.Theme, current views.View, filter string, layouts map[string]string, folds string) string {

@@ -12,7 +12,7 @@ import (
 
 	"github.com/linode/linodego/v2"
 
-	"github.com/linode/tui/linode"
+	"github.com/luthermonson/linode-tui/linode"
 )
 
 func TestClearGuard(t *testing.T) {

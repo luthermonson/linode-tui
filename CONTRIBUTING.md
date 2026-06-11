@@ -5,7 +5,7 @@ Thanks for your interest! This project is a Bubble Tea-based TUI for the Linode 
 ## Quick start
 
 ```bash
-git clone https://github.com/linode/tui && cd tui
+git clone https://github.com/luthermonson/linode-tui && cd tui
 go test ./...
 go vet ./...
 go build ./cmd/linode-tui

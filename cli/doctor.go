@@ -17,9 +17,9 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v3"
 
-	"github.com/linode/tui/config"
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tui/views"
+	"github.com/luthermonson/linode-tui/config"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tui/views"
 )
 
 func doctorCommand() *cli.Command {

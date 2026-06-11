@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/linode/linodego/v2"
 
-	"github.com/linode/tui/audit"
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tui/views"
+	"github.com/luthermonson/linode-tui/audit"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tui/views"
 )
 
 type configLinode struct {

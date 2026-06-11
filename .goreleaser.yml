@@ -70,17 +70,17 @@ changelog:
 
 release:
   github:
-    owner: linode
-    name: tui
+    owner: luthermonson
+    name: linode-tui
   draft: true
   prerelease: auto
 
 brews:
   - repository:
-      owner: linode
+      owner: luthermonson
       name: homebrew-tap
-    homepage: https://github.com/linode/tui
-    description: A k9s-style TUI for the Linode API
+    homepage: https://github.com/luthermonson/linode-tui
+    description: A k9s-inspired TUI for the Linode API
     license: MIT
     install: |
       bin.install "linode-tui"

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/linode/tui/config"
-	"github.com/linode/tui/onepassword"
+	"github.com/luthermonson/linode-tui/config"
+	"github.com/luthermonson/linode-tui/onepassword"
 )
 
 var ErrNoToken = errors.New("no Linode API token resolved")

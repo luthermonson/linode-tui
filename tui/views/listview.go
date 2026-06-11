@@ -18,11 +18,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/linode/tui/audit"
-	"github.com/linode/tui/config"
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tools"
-	"github.com/linode/tui/tui/theme"
+	"github.com/luthermonson/linode-tui/audit"
+	"github.com/luthermonson/linode-tui/config"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tools"
+	"github.com/luthermonson/linode-tui/tui/theme"
 )
 
 type Lister[T any] func(ctx context.Context, c *linode.Client) ([]T, error)

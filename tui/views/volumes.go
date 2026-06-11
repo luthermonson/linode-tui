@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/linode/linodego/v2"
 
-	"github.com/linode/tui/linode"
+	"github.com/luthermonson/linode-tui/linode"
 )
 
 

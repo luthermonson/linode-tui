@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linode/tui/linode"
+	"github.com/luthermonson/linode-tui/linode"
 )
 
 const liveEnv = "LINODE_TUI_LIVE"

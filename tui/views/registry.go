@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/linode/tui/config"
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tui/theme"
+	"github.com/luthermonson/linode-tui/config"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tui/theme"
 )
 
 type View interface {

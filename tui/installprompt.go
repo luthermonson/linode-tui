@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 
-	"github.com/linode/tui/tools"
+	"github.com/luthermonson/linode-tui/tools"
 )
 
 const installPromptCustomOpt = "__custom__"

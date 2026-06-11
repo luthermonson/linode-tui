@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/linode/tui/linode"
-	"github.com/linode/tui/tools"
+	"github.com/luthermonson/linode-tui/linode"
+	"github.com/luthermonson/linode-tui/tools"
 )
 
 // (tea import used by OnEdit field below)

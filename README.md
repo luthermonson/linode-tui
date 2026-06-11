@@ -40,13 +40,13 @@ See **[docs/USAGE.md](docs/USAGE.md)** for the full reference — every command-
 ## Install
 
 ```bash
-go install github.com/linode/tui/cmd/linode-tui@latest
+go install github.com/luthermonson/linode-tui/cmd/linode-tui@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/linode/tui && cd tui
+git clone https://github.com/luthermonson/linode-tui && cd tui
 go build -o linode-tui ./cmd/linode-tui
 ```
 
@@ -248,7 +248,7 @@ linode-tui completion pwsh
 
 ## Releases
 
-Cross-platform binaries (Linux / macOS / Windows × amd64/arm64) are produced by [GoReleaser](https://goreleaser.com/) on every tag — see `.goreleaser.yml`. Artifacts and `checksums.txt` are attached to each GitHub release; a `homebrew-tap` formula is updated for `brew install linode/tap/linode-tui`.
+Cross-platform binaries (Linux / macOS / Windows × amd64/arm64) are produced by [GoReleaser](https://goreleaser.com/) on every tag — see `.goreleaser.yml`. Artifacts and `checksums.txt` are attached to each GitHub release; a `homebrew-tap` formula is updated for `brew install luthermonson/tap/linode-tui`.
 
 Cut a release locally with:
 

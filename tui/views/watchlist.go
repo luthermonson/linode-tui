@@ -15,7 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/linode/linodego/v2"
 
-	"github.com/linode/tui/linode"
+	"github.com/luthermonson/linode-tui/linode"
 )
 
 func init() {
