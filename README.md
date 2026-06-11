@@ -11,6 +11,8 @@ Built on Bubble Tea + linodego + urfave/cli/v3.
 - **Drill into specialized TUIs**:
   - `enter` on an LKE cluster → fetches its kubeconfig and execs into [k9s](https://k9scli.io/)
   - `enter` on a DBaaS instance → builds a connection URL and execs into [lazysql](https://github.com/jorgerojas26/lazysql)
+  - `c` on a Linode → SSH straight to its public IPv4 (`tools.ssh`, default `ssh root@<ip>`)
+  - `C` on a Linode → [lish](https://techdocs.akamai.com/cloud-computing/docs/access-your-system-console-using-lish) console via Linode's bastion — works even with no public IP
 - **Lazy auto-install** of external tools with checksum verification and a first-run prompt for an install dir
 - **1Password integration** for tokens — config stores `op://` references, never plaintext
 - **Account switcher** — multi-account config with on-the-fly switching
