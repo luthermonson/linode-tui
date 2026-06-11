@@ -4,23 +4,18 @@ A [k9s](https://k9scli.io/)-inspired terminal UI for the [Linode API](https://ww
 
 Built on Bubble Tea + linodego + urfave/cli/v3.
 
-## Screenshots
-
-> Recording-friendly: `vhs demo.tape` (after writing a tape file) or `asciinema rec demo.cast`.
-> Drop renderings under `docs/img/` and reference them here. Until then, the layout is:
->
-> ```
-> linode-tui · Linodes
-> ┌────────┬────────────────┬─────────┬──────────────────┬──────────┬──────────────┐
-> │ ID     │ LABEL          │ REGION  │ TYPE             │ STATUS   │ IPv4         │
-> ├────────┼────────────────┼─────────┼──────────────────┼──────────┼──────────────┤
-> │ 12345  │ prod-web-1     │ us-east │ g6-standard-2    │ running  │ 198.51.100.1 │
-> │ 12346  │ prod-web-2     │ us-east │ g6-standard-2    │ running  │ 198.51.100.2 │
-> │ ✓ 12347│ dev-scratch    │ us-mia  │ g6-nanode-1      │ stopped  │ 198.51.100.3 │
-> └────────┴────────────────┴─────────┴──────────────────┴──────────┴──────────────┘
-> 1 selected · 3 linodes · refreshed 1s ago
-> : command  / filter  ? help  ctrl+c quit
-> ```
+```
+linode-tui · Linodes
+┌────────┬────────────────┬─────────┬──────────────────┬──────────┬──────────────┐
+│ ID     │ LABEL          │ REGION  │ TYPE             │ STATUS   │ IPv4         │
+├────────┼────────────────┼─────────┼──────────────────┼──────────┼──────────────┤
+│ 12345  │ prod-web-1     │ us-east │ g6-standard-2    │ running  │ 198.51.100.1 │
+│ 12346  │ prod-web-2     │ us-east │ g6-standard-2    │ running  │ 198.51.100.2 │
+│ ✓ 12347│ dev-scratch    │ us-mia  │ g6-nanode-1      │ stopped  │ 198.51.100.3 │
+└────────┴────────────────┴─────────┴──────────────────┴──────────┴──────────────┘
+1 selected · 3 linodes · refreshed 1s ago
+: command  / filter  ? help  ctrl+c quit
+```
 
 ## Features
 
