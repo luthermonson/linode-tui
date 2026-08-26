@@ -39,7 +39,7 @@ func NewApp(version, commit string) *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "theme",
-				Usage: "theme name: dark | light | dracula | solarized-light | gruvbox-dark",
+				Usage: "theme name: dark | light | dracula | solarized-light | gruvbox-dark | gruvbox-light",
 			},
 			&cli.StringFlag{
 				Name:  "config",

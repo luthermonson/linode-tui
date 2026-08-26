@@ -104,6 +104,26 @@ func GruvboxDark() Theme {
 	}
 }
 
+// GruvboxLight is the light-mode gruvbox palette (morhetz/gruvbox). Light mode
+// pairs the pale light0 background with the *faded* accent variants from the
+// upstream colors/gruvbox.vim, which read with enough contrast on the cream bg
+// where the bright variants used by GruvboxDark would wash out.
+func GruvboxLight() Theme {
+	return Theme{
+		Name:      "gruvbox-light",
+		Primary:   "#076678", // faded blue
+		Secondary: "#8F3F71", // faded purple
+		Accent:    "#AF3A03", // faded orange
+		Text:      "#3C3836", // dark1
+		Muted:     "#928374", // gray
+		Bg:        "#FBF1C7", // light0
+		Border:    "#D5C4A1", // light2
+		Error:     "#9D0006", // faded red
+		Warn:      "#B57614", // faded yellow
+		Ok:        "#79740E", // faded green
+	}
+}
+
 func ByName(name string) (Theme, bool) {
 	switch name {
 	case "dark":
@@ -116,11 +136,13 @@ func ByName(name string) (Theme, bool) {
 		return SolarizedLight(), true
 	case "gruvbox-dark":
 		return GruvboxDark(), true
+	case "gruvbox-light":
+		return GruvboxLight(), true
 	default:
 		return Theme{}, false
 	}
 }
 
 func Names() []string {
-	return []string{"dark", "light", "dracula", "solarized-light", "gruvbox-dark"}
+	return []string{"dark", "light", "dracula", "solarized-light", "gruvbox-dark", "gruvbox-light"}
 }
