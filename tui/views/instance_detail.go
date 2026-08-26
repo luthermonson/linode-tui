@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	Register("instance_detail", []string{"linode_detail", "instance-detail"}, newInstanceDetail)
+	RegisterChild("instance_detail", []string{"linode_detail", "instance-detail"}, newInstanceDetail)
 }
 
 // instanceDetailTab is a section of the Cloud Manager-style detail view.

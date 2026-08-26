@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	Register("domain_records", []string{"records", "dnsrr"}, newDomainRecords)
+	RegisterChild("domain_records", []string{"records", "dnsrr"}, newDomainRecords)
 }
 
 func newDomainRecords(d Deps) View {
