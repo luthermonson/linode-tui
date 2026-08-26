@@ -75,14 +75,23 @@ release:
   draft: true
   prerelease: auto
 
-brews:
-  - repository:
-      owner: luthermonson
-      name: homebrew-tap
-    homepage: https://github.com/luthermonson/linode-tui
-    description: A k9s-inspired TUI for the Linode API
-    license: MIT
-    install: |
-      bin.install "linode-tui"
-    test: |
-      system "#{bin}/linode-tui", "version"
+# Homebrew tap publishing is disabled until a token that can push to the
+# separate luthermonson/homebrew-tap repo is available. The default
+# secrets.GITHUB_TOKEN is scoped to this repo only and cannot push there, so an
+# active brews block would fail the release at the tap step. To re-enable:
+#   1. Create a PAT (classic `repo`, or fine-grained contents:write on the tap
+#      repo) and add it as the repo secret HOMEBREW_TAP_TOKEN — the release
+#      workflow already prefers it over GITHUB_TOKEN.
+#   2. Uncomment the block below. Note: `brews` is deprecated in favor of
+#      `homebrew_casks`; consider migrating at the same time.
+# brews:
+#   - repository:
+#       owner: luthermonson
+#       name: homebrew-tap
+#     homepage: https://github.com/luthermonson/linode-tui
+#     description: A k9s-inspired TUI for the Linode API
+#     license: MIT
+#     install: |
+#       bin.install "linode-tui"
+#     test: |
+#       system "#{bin}/linode-tui", "version"
