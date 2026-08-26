@@ -168,8 +168,12 @@ func (m *lkeDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// current pane (listView's DrillInMsg handler won't see it).
 		return m, m.runDrillIn(msg)
 	case lkeDetailDrillDoneMsg:
-		// k9s exited; trigger a fresh fetch so cluster status reflects
-		// anything that happened while we were detached.
+		// k9s exited; remove the short-lived kubeconfig now that it's no
+		// longer in use, then trigger a fresh fetch so cluster status
+		// reflects anything that happened while we were detached.
+		if msg.cleanup != nil {
+			msg.cleanup()
+		}
 		m.loading = true
 		return m, m.fetchCmd()
 	case tools.ExitMsg:
@@ -458,6 +462,11 @@ func (m *lkeDetail) runDrillIn(msg DrillInMsg) tea.Cmd {
 	runner := tools.New(m.deps.Cfg)
 	exec, err := runner.RunWithEnv(context.Background(), msg.Tool, msg.Vars, msg.Env)
 	if err != nil {
+		// Tool not installed → bubble up so the root model can offer to
+		// install it and re-dispatch the drill, same as listView.drillIn.
+		if missing, ok := tools.IsToolMissing(err); ok {
+			return func() tea.Msg { return InstallNeededMsg{Kind: missing.Kind, Drill: msg} }
+		}
 		if msg.Cleanup != nil {
 			msg.Cleanup()
 		}
@@ -466,15 +475,20 @@ func (m *lkeDetail) runDrillIn(msg DrillInMsg) tea.Cmd {
 		return nil
 	}
 	cleanup := msg.Cleanup
+	// IMPORTANT: do NOT call cleanup() inside this closure. tea.Sequence runs
+	// each command's function immediately and only Sends the resulting msg —
+	// it does not wait for the ExecProcess (k9s) to finish. Calling cleanup
+	// here would delete the kubeconfig temp file before k9s ever reads it,
+	// which surfaces as k9s' "Watcher failed for contexts -- stat <path>"
+	// (see issue #2). Instead defer cleanup onto the done msg, handled in a
+	// later Update pass — guaranteed after the blocking execMsg has run k9s
+	// to completion, because messages are processed in FIFO order.
 	return tea.Sequence(exec, func() tea.Msg {
-		if cleanup != nil {
-			cleanup()
-		}
-		return lkeDetailDrillDoneMsg{}
+		return lkeDetailDrillDoneMsg{cleanup: cleanup}
 	})
 }
 
-type lkeDetailDrillDoneMsg struct{}
+type lkeDetailDrillDoneMsg struct{ cleanup func() }
 
 // Ensure linode pkg is referenced so future helpers (if added) compile.
 var _ = linode.NewClient
