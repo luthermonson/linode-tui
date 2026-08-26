@@ -1462,7 +1462,7 @@ func cmdbarVerbs() []string {
 // complete set of first-token completions for the cmdbar.
 func allCmdbarVerbs() []string {
 	verbs := cmdbarVerbs()
-	verbs = append(verbs, views.Names()...)
+	verbs = append(verbs, views.NavCompletions()...)
 	sort.Strings(verbs)
 	// Dedupe in case any verb name collides with a view name.
 	out := verbs[:0]
@@ -3110,6 +3110,13 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg { return resourceDiffCmd(client, th, resource, id1, id2)() }
 	}
 
+	if views.IsChild(head) {
+		// Drill-in views need parent context (e.g. a nodebalancer_id). Opening
+		// one bare from the command bar would just error or show an empty list,
+		// so point the user at the parent flow instead.
+		m.status = head + " is a drill-in view — open it from its parent list (select a row and press enter)"
+		return m, nil
+	}
 	if f, ok := views.Resolve(head); ok {
 		m.current = f(m.deps())
 		m.currentName = head

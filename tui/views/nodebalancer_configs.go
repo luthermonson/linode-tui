@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	Register("nodebalancer_configs", []string{"nbconfigs"}, newNodeBalancerConfigs)
+	RegisterChild("nodebalancer_configs", []string{"nbconfigs"}, newNodeBalancerConfigs)
 }
 
 func newNodeBalancerConfigs(d Deps) View {

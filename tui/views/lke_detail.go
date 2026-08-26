@@ -17,7 +17,7 @@ import (
 )
 
 func init() {
-	Register("lke_detail", []string{"cluster_detail", "k8s_detail"}, newLKEDetail)
+	RegisterChild("lke_detail", []string{"cluster_detail", "k8s_detail"}, newLKEDetail)
 }
 
 type lkeDetailTab int
