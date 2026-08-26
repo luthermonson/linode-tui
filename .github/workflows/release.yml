@@ -27,6 +27,13 @@ jobs:
           go-version: '1.26'
           cache: true
 
+      # .goreleaser.yml generates SPDX SBOMs, which shells out to `syft`.
+      # It isn't preinstalled on the runner, so install it before GoReleaser
+      # runs (otherwise the sbom step fails with "syft: executable file not
+      # found in $PATH").
+      - name: Install syft (for SBOM generation)
+        uses: anchore/sbom-action/download-syft@v0
+
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
