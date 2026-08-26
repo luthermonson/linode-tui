@@ -84,6 +84,26 @@ func SolarizedLight() Theme {
 	}
 }
 
+// GruvboxDark is the retro-groove "gruvbox" dark palette by Pavel Pertsev
+// (morhetz/gruvbox). Hex values are the canonical bright-variant colors from
+// the upstream colors/gruvbox.vim: bg0 #282828, fg1 #ebdbb2, gray #928374,
+// and the bright red/green/yellow/blue/purple/orange.
+func GruvboxDark() Theme {
+	return Theme{
+		Name:      "gruvbox-dark",
+		Primary:   "#83A598", // bright blue
+		Secondary: "#D3869B", // bright purple
+		Accent:    "#FE8019", // bright orange
+		Text:      "#EBDBB2", // fg1
+		Muted:     "#928374", // gray
+		Bg:        "#282828", // bg0
+		Border:    "#504945", // bg2
+		Error:     "#FB4934", // bright red
+		Warn:      "#FABD2F", // bright yellow
+		Ok:        "#B8BB26", // bright green
+	}
+}
+
 func ByName(name string) (Theme, bool) {
 	switch name {
 	case "dark":
@@ -94,11 +114,13 @@ func ByName(name string) (Theme, bool) {
 		return Dracula(), true
 	case "solarized-light":
 		return SolarizedLight(), true
+	case "gruvbox-dark":
+		return GruvboxDark(), true
 	default:
 		return Theme{}, false
 	}
 }
 
 func Names() []string {
-	return []string{"dark", "light", "dracula", "solarized-light"}
+	return []string{"dark", "light", "dracula", "solarized-light", "gruvbox-dark"}
 }

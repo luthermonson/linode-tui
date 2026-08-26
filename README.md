@@ -16,7 +16,7 @@ Built on Bubble Tea + linodego + urfave/cli/v3.
 - **Lazy auto-install** of external tools with checksum verification and a first-run prompt for an install dir
 - **1Password integration** for tokens — config stores `op://` references, never plaintext
 - **Account switcher** — multi-account config with on-the-fly switching
-- **Themes**: dark, light, dracula, solarized-light — switchable live via `:theme <name>`
+- **Themes**: dark, light, dracula, solarized-light, gruvbox-dark — switchable live via `:theme <name>`
 - **Configurable exec**: point `tools.kubernetes.exec` / `tools.mysql.exec` / `tools.postgresql.exec` at anything (Lens, MySQL Workbench, etc.)
 - **Bookmarks + watchlist** — star (`*`) any row; bookmarked resources float to the top of their view and join a synthetic `:watchlist` with drift detection
 - **Saved layouts** — capture pane shapes with `:layout save <name>`, share them as `?sha256=…` pinned URLs, and auto-load a `default` layout on launch
@@ -164,7 +164,7 @@ A small cross-section — see [docs/USAGE.md](docs/USAGE.md) for the full list.
 | `:linodes` / `:instances` / `:inst` | Switch to Linodes view (aliases vary per view) |
 | `:databases` / `:lke` / `:volumes` / etc. | Switch view |
 | `:watchlist` | Synthetic view across all bookmarked rows with drift detection |
-| `:theme dark\|light\|dracula\|solarized-light` | Change theme |
+| `:theme dark\|light\|dracula\|solarized-light\|gruvbox-dark` | Change theme |
 | `:account` / `:account <name>` | List / switch active account |
 | `:layout save\|load\|list\|share` `<name>` | Manage saved pane layouts |
 | `:bookmark list\|migrate\|export\|scope` | Manage bookmarks |

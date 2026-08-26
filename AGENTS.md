@@ -33,7 +33,7 @@ tools/        # external exec (k9s, lazysql, …): resolve, install, run
 tui/
   app.go               # root Bubble Tea model: header + body + footer + cmdbar
   keys/                # global keymap, per-view keymap composition
-  theme/               # lipgloss styles for light/dark/dracula/solarized-light
+  theme/               # lipgloss styles for light/dark/dracula/solarized-light/gruvbox-dark
   cmdbar/              # `:` command palette
   views/
     registry.go        # name → view factory; how `:` dispatches
@@ -67,7 +67,7 @@ Source of truth is `config/config.go`. High-level shape:
 
 ```yaml
 default_account: dev
-active_theme: light          # dark | light | dracula | solarized-light
+active_theme: light          # dark | light | dracula | solarized-light | gruvbox-dark
 refresh: 2s
 
 accounts:
