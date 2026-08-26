@@ -3110,11 +3110,26 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg { return resourceDiffCmd(client, th, resource, id1, id2)() }
 	}
 
+	// `:<view> <id>` — jump straight to a resource's detail page, e.g.
+	// `:lke 1234`, `:linodes 42`, `:domains 99`. Works for any view with an
+	// id-addressable detail; the id is routed to the drill-in's context and we
+	// reuse NavigateMsg so back-nav (ctrl+b) behaves like pressing enter on a row.
+	if len(parts) >= 2 {
+		if id, err := strconv.Atoi(parts[1]); err == nil {
+			if name, ok := views.ResolveName(head); ok {
+				if drill, ok := views.IDDrill(name); ok {
+					target := drill.View
+					ctx := map[string]any{drill.Key: id, "focus_id": id}
+					return m, func() tea.Msg { return views.NavigateMsg{Name: target, Context: ctx} }
+				}
+			}
+		}
+	}
 	if views.IsChild(head) {
 		// Drill-in views need parent context (e.g. a nodebalancer_id). Opening
 		// one bare from the command bar would just error or show an empty list,
 		// so point the user at the parent flow instead.
-		m.status = head + " is a drill-in view — open it from its parent list (select a row and press enter)"
+		m.status = head + " is a drill-in view — open it from its parent list (enter on a row), or pass an id: :" + head + " <id>"
 		return m, nil
 	}
 	if f, ok := views.Resolve(head); ok {

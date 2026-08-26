@@ -163,6 +163,7 @@ A small cross-section — see [docs/USAGE.md](docs/USAGE.md) for the full list.
 |---|---|
 | `:linodes` / `:instances` / `:inst` | Switch to Linodes view (aliases vary per view) |
 | `:databases` / `:lke` / `:volumes` / etc. | Switch view |
+| `:lke <id>` / `:linodes <id>` / `:domains <id>` / `:nodebalancers <id>` | Jump straight to that resource's detail page |
 | `:watchlist` | Synthetic view across all bookmarked rows with drift detection |
 | `:theme dark\|light\|dracula\|solarized-light\|gruvbox-dark\|gruvbox-light` | Change theme |
 | `:account` / `:account <name>` | List / switch active account |
