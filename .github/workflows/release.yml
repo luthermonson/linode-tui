@@ -1,0 +1,52 @@
+name: Release
+
+# Cut a release by pushing a tag:  git tag v1.2.3 && git push origin v1.2.3
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Least privilege: GoReleaser only needs to create the GitHub release and
+# upload artifacts to *this* repo. No packages/id-token scopes are used.
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    name: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # GoReleaser needs the full history and all tags to build the
+          # changelog and derive the version.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          # GITHUB_TOKEN is used both to create the GitHub release in THIS repo
+          # and (because .goreleaser.yml has a `brews` block) to push the
+          # Homebrew formula to luthermonson/homebrew-tap.
+          #
+          # The default secrets.GITHUB_TOKEN is scoped to this repo only, so it
+          # CANNOT push to the separate homebrew-tap repo. For the tap push to
+          # succeed you must create a Personal Access Token (classic, `repo`
+          # scope, or a fine-grained PAT with contents:write on the tap repo)
+          # and store it as the repository secret HOMEBREW_TAP_TOKEN.
+          #
+          # The expression below prefers HOMEBREW_TAP_TOKEN when present and
+          # falls back to the built-in GITHUB_TOKEN otherwise, so a plain
+          # `git tag && git push` release still works. NOTE: with the `brews`
+          # block active and only the default token, the tap step WILL fail the
+          # release. If you do not want a Homebrew tap, remove/comment the
+          # `brews` section in .goreleaser.yml.
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
