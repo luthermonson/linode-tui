@@ -74,7 +74,15 @@ func RunFull(ctx context.Context, cfg *config.Config, client *linode.Client, ini
 			m.status = "unknown view: " + initialView + " (showing instances)"
 		}
 	}
-	prog := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithMouseCellMotion())
+	// Mouse capture is OFF by default: enabling it routes clicks/drags to the
+	// program and disables the terminal's native text selection (double-click
+	// highlight, drag-select, copy). Opt in with `mouse: true` in config or the
+	// `:mouse` command; wheel-scroll works while it's on, keyboard scroll always.
+	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithContext(ctx)}
+	if cfg.Mouse {
+		opts = append(opts, tea.WithMouseCellMotion())
+	}
+	prog := tea.NewProgram(m, opts...)
 	_, err := prog.Run()
 	return err
 }
@@ -99,6 +107,7 @@ type model struct {
 	previewKind   string  // primary view name at split-preview time
 	quatRatio     float64 // share of total height the quaternary pane gets
 	readOnly      bool    // session-scoped: blocks mutating dispatches
+	mouseOn       bool    // mouse reporting on (wheel scroll; blocks native text selection)
 	stack         []viewFrame
 	w, h          int
 	status      string
@@ -237,6 +246,7 @@ func newModel(cfg *config.Config, client *linode.Client) model {
 		splitRatio: 0.5,
 		quatRatio:  0.33,
 		status:     pruneNotice,
+		mouseOn:    cfg.Mouse,
 	}
 	m.cmd.SetCompletions(allCmdbarVerbs())
 	if f, ok := views.Resolve("instances"); ok {
@@ -1440,6 +1450,7 @@ func cmdbarVerbs() []string {
 		"export",
 		"fold-char",
 		"layout",
+		"mouse",
 		"new",
 		"open",
 		"pane",
@@ -1915,6 +1926,35 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 			m.status = "read-only: OFF"
 		}
 		return m, nil
+
+	case "mouse":
+		// Toggle terminal mouse reporting. ON gives wheel-scroll in lists but
+		// takes over the mouse, so the terminal's own text selection (double
+		// click / drag to highlight and copy) stops working. OFF hands the
+		// mouse back to the terminal. `:mouse`, `:mouse on`, `:mouse off`.
+		want := !m.mouseOn
+		if len(parts) >= 2 {
+			switch parts[1] {
+			case "on", "true", "1":
+				want = true
+			case "off", "false", "0":
+				want = false
+			case "toggle":
+				want = !m.mouseOn
+			default:
+				m.status = "usage: :mouse [on|off]"
+				return m, nil
+			}
+		}
+		m.mouseOn = want
+		m.cfg.Mouse = want
+		_ = m.cfg.Save()
+		if want {
+			m.status = "mouse: ON — wheel scroll enabled; terminal text selection is disabled"
+			return m, tea.EnableMouseCellMotion
+		}
+		m.status = "mouse: OFF — double-click / drag to select and copy in your terminal"
+		return m, tea.DisableMouse
 
 	case "reload":
 		newCfg, err := config.Load(m.cfg.Path())
