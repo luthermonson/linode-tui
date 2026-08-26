@@ -117,7 +117,7 @@ var auditHelp = []views.HelpEntry{
 
 var cmdBarHelp = []views.HelpEntry{
 	{Key: ":account [name]", Desc: "list accounts or switch (re-resolves token)"},
-	{Key: ":theme <name> | list", Desc: "switch theme (dark|light|dracula|solarized-light|gruvbox-dark) or preview swatches"},
+	{Key: ":theme <name> | list", Desc: "switch theme (dark|light|dracula|solarized-light|gruvbox-dark|gruvbox-light) or preview swatches"},
 	{Key: ":refresh [view] <dur|off>", Desc: "set global / per-view interval, or :refresh defaults for the preset"},
 	{Key: ":split <view>", Desc: "open a secondary pane next to current"},
 	{Key: ":pane <slot> <view>", Desc: "swap one pane (primary | secondary | tertiary | quaternary)"},
