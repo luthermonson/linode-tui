@@ -38,7 +38,7 @@ validity is one of its check groups).
 
 ```yaml
 default_account: dev          # picks accounts.<name> as the active one
-active_theme: dark            # dark | light | dracula | solarized-light
+active_theme: dark            # dark | light | dracula | solarized-light | gruvbox-dark
 refresh: 2s                   # global default for view refresh
 
 refresh_overrides:            # per-view refresh interval (overrides `refresh`)
@@ -170,7 +170,7 @@ A layout = which view goes in each of up to 4 panes plus the split ratios. You c
 |---|---|
 | `:account` | List configured accounts |
 | `:account <name>` | Switch active account (re-resolves token, rebuilds client) |
-| `:theme <name>` | Switch theme live: dark / light / dracula / solarized-light |
+| `:theme <name>` | Switch theme live: dark / light / dracula / solarized-light / gruvbox-dark |
 | `:theme list` | Show themes with color swatches |
 | `:theme account <name> <theme>` | Set per-account theme override |
 
