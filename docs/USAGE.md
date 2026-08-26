@@ -164,6 +164,11 @@ A layout = which view goes in each of up to 4 panes plus the split ratios. You c
 | `:open <resource> [id]` | Inline JSON view of one resource in a detail modal |
 | `:diff snapshot <resource> <id> [@N]` | Compare current resource JSON against a stored snapshot |
 
+Any view with a detail page accepts an **id** to jump straight there instead of
+scrolling the list: `:lke 1234` opens that cluster's detail, `:linodes 42` that
+Linode's detail, `:domains 99` its DNS records, `:nodebalancers 7` its configs.
+The drill-in's own verb works too (`:lke_detail 1234`).
+
 ### Accounts and themes
 
 | Verb | Effect |

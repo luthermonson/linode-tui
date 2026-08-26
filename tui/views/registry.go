@@ -74,28 +74,28 @@ func RegisterChild(name string, aliases []string, f Factory) {
 	registry = append(registry, entry{name: name, aliases: aliases, factory: f, child: true})
 }
 
-func Resolve(query string) (Factory, bool) {
+// lookup resolves a query to its registry entry. Exact name/alias matches win
+// first (this is how a parent's NavigateMsg reaches a child by its exact name);
+// then prefix matches on names, then aliases — with children skipped in the
+// prefix stages, so e.g. `:node` lands on the top-level `nodebalancers`, never
+// the `nodebalancer_configs` drill-in, while `:lin` still resolves `instances`
+// via its "linodes" alias.
+func lookup(query string) (entry, bool) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
-		return nil, false
+		return entry{}, false
 	}
-	// Exact match on a canonical name or alias.
 	for _, e := range registry {
 		if e.name == q || slices.Contains(e.aliases, q) {
-			return tagFactory(e.name, e.factory), true
+			return e, true
 		}
 	}
-	// Prefix match — on names first, then aliases — so e.g. `:lin` resolves to
-	// instances via its "linodes" alias, not just `:instances`. Child views are
-	// skipped here: they resolve only by exact name/alias (which is how a
-	// parent's NavigateMsg reaches them), so a prefix like `:node` lands on the
-	// top-level `nodebalancers`, never the `nodebalancer_configs` drill-in.
 	for _, e := range registry {
 		if e.child {
 			continue
 		}
 		if strings.HasPrefix(e.name, q) {
-			return tagFactory(e.name, e.factory), true
+			return e, true
 		}
 	}
 	for _, e := range registry {
@@ -104,11 +104,27 @@ func Resolve(query string) (Factory, bool) {
 		}
 		for _, a := range e.aliases {
 			if strings.HasPrefix(a, q) {
-				return tagFactory(e.name, e.factory), true
+				return e, true
 			}
 		}
 	}
-	return nil, false
+	return entry{}, false
+}
+
+func Resolve(query string) (Factory, bool) {
+	e, ok := lookup(query)
+	if !ok {
+		return nil, false
+	}
+	return tagFactory(e.name, e.factory), true
+}
+
+// ResolveName returns the canonical registered name a query resolves to, using
+// the same exact-then-prefix, alias-aware rules as Resolve. Used to key the
+// id-drill map off a user-typed verb like `:lke` or `:nb`.
+func ResolveName(query string) (string, bool) {
+	e, ok := lookup(query)
+	return e.name, ok
 }
 
 // IsChild reports whether query names a context-only drill-in view (by
@@ -149,6 +165,36 @@ func Names() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// IDDrillTarget names the drill-in view a `:<verb> <id>` command should open
+// and the Deps.Context key the id is passed under.
+type IDDrillTarget struct {
+	View string
+	Key  string
+}
+
+// idDrills maps a canonical view name to its id-addressable detail view. Both
+// the top-level list verb (`:lke 1234`) and the drill-in's own name
+// (`:lke_detail 1234`) are keys, so either form jumps straight to the detail
+// for that id. Only resources with a detail/child view appear here.
+var idDrills = map[string]IDDrillTarget{
+	"instances":            {"instance_detail", "instance_id"},
+	"lke":                  {"lke_detail", "cluster_id"},
+	"domains":              {"domain_records", "domain_id"},
+	"nodebalancers":        {"nodebalancer_configs", "nodebalancer_id"},
+	"instance_detail":      {"instance_detail", "instance_id"},
+	"lke_detail":           {"lke_detail", "cluster_id"},
+	"domain_records":       {"domain_records", "domain_id"},
+	"nodebalancer_configs": {"nodebalancer_configs", "nodebalancer_id"},
+}
+
+// IDDrill returns the detail view + context key for a canonical view name, or
+// ok=false if the view has no id-addressable detail. Pass a name from
+// ResolveName so aliases and prefixes (`:nb 999`, `:k8s 1234`) work.
+func IDDrill(name string) (IDDrillTarget, bool) {
+	d, ok := idDrills[name]
+	return d, ok
 }
 
 // NavCompletions returns every first-token completion the command bar should
