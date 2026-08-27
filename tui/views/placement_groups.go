@@ -19,14 +19,14 @@ func newPlacementGroups(d Deps) View {
 	return newListView(listOpts[linodego.PlacementGroup]{
 		Deps:  d,
 		Title: "Placement Groups",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 30},
-			{Title: "REGION", Width: 14},
-			{Title: "TYPE", Width: 14},
-			{Title: "POLICY", Width: 14},
-			{Title: "MEMBERS", Width: 10},
-			{Title: "COMPLIANT", Width: 10},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 30, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "TYPE", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "POLICY", Width: 14, MinWidth: 8, Priority: PriLow},
+			{Title: "MEMBERS", Width: 10, MinWidth: 7, Priority: PriLow},
+			{Title: "COMPLIANT", Width: 10, MinWidth: 9, Priority: PriHigh},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.PlacementGroup, error) {
 			return c.Raw().ListPlacementGroups(ctx, nil)

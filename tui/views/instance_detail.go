@@ -144,10 +144,14 @@ func (m *instanceDetail) fetchCmd() tea.Cmd {
 }
 
 func (m *instanceDetail) tickCmd() tea.Cmd {
-	d := 5 * time.Second
-	if m.deps.Cfg != nil && m.deps.Cfg.Refresh > 0 {
-		d = m.deps.Cfg.Refresh
+	// Same resolution as the lists, so refresh_overrides["instance_detail"]
+	// (and the per-account overlay) apply here too. This view fans out over
+	// ~8 endpoints per tick, so it's the one you most want to slow down.
+	name := m.deps.CtxString("view_name")
+	if name == "" {
+		name = "instance_detail"
 	}
+	d := refreshInterval(m.deps, name, 0)
 	gen := m.gen
 	return tea.Tick(d, func(time.Time) tea.Msg { return instanceDetailTickMsg{id: gen} })
 }

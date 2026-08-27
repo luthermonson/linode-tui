@@ -110,10 +110,13 @@ func (m *lkeDetail) fetchCmd() tea.Cmd {
 }
 
 func (m *lkeDetail) tickCmd() tea.Cmd {
-	d := 5 * time.Second
-	if m.deps.Cfg != nil && m.deps.Cfg.Refresh > 0 {
-		d = m.deps.Cfg.Refresh
+	// Same resolution as the lists, so refresh_overrides["lke_detail"] (and
+	// the per-account overlay) actually apply here instead of being ignored.
+	name := m.deps.CtxString("view_name")
+	if name == "" {
+		name = "lke_detail"
 	}
+	d := refreshInterval(m.deps, name, 0)
 	gen := m.gen
 	return tea.Tick(d, func(time.Time) tea.Msg { return lkeDetailTickMsg{id: gen} })
 }
@@ -454,38 +457,20 @@ func (m *lkeDetail) Help() []HelpEntry {
 }
 
 // runDrillIn invokes the tools runner for a DrillInMsg arriving while the
-// detail view is the active pane. Mirrors listView.drillIn but stays
-// self-contained so we don't depend on listView semantics. Uses
-// context.Background() so the wrapped exec.Cmd doesn't die before tea
-// invokes it.
+// detail view is the active pane (listView's handler never sees it — the
+// detail view is the current pane). The ctx lifetime and deferred-cleanup
+// rules that make this work live in RunDrillIn; this wrapper only decides
+// where an error is displayed.
 func (m *lkeDetail) runDrillIn(msg DrillInMsg) tea.Cmd {
-	runner := tools.New(m.deps.Cfg)
-	exec, err := runner.RunWithEnv(context.Background(), msg.Tool, msg.Vars, msg.Env)
+	cmd, err := RunDrillIn(m.deps, msg, func(cleanup func()) tea.Msg {
+		return lkeDetailDrillDoneMsg{cleanup: cleanup}
+	})
 	if err != nil {
-		// Tool not installed → bubble up so the root model can offer to
-		// install it and re-dispatch the drill, same as listView.drillIn.
-		if missing, ok := tools.IsToolMissing(err); ok {
-			return func() tea.Msg { return InstallNeededMsg{Kind: missing.Kind, Drill: msg} }
-		}
-		if msg.Cleanup != nil {
-			msg.Cleanup()
-		}
 		m.data.err = err
 		m.renderBody()
 		return nil
 	}
-	cleanup := msg.Cleanup
-	// IMPORTANT: do NOT call cleanup() inside this closure. tea.Sequence runs
-	// each command's function immediately and only Sends the resulting msg —
-	// it does not wait for the ExecProcess (k9s) to finish. Calling cleanup
-	// here would delete the kubeconfig temp file before k9s ever reads it,
-	// which surfaces as k9s' "Watcher failed for contexts -- stat <path>"
-	// (see issue #2). Instead defer cleanup onto the done msg, handled in a
-	// later Update pass — guaranteed after the blocking execMsg has run k9s
-	// to completion, because messages are processed in FIFO order.
-	return tea.Sequence(exec, func() tea.Msg {
-		return lkeDetailDrillDoneMsg{cleanup: cleanup}
-	})
+	return cmd
 }
 
 type lkeDetailDrillDoneMsg struct{ cleanup func() }

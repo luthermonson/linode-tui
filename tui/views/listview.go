@@ -30,10 +30,89 @@ type Rower[T any] func(T) table.Row
 type Matcher[T any] func(T, string) bool
 type OnEnter[T any] func(T, Deps) tea.Cmd
 
+// Column priorities. Narrow panes drop the lowest-priority column first;
+// PriPinned is never dropped, so a view always keeps its identity columns
+// (ID + LABEL/NAME/DOMAIN) even on a phone-sized terminal.
+const (
+	PriPinned = 100 // never dropped
+	PriHigh   = 70  // status, account — the second thing you look at
+	PriMed    = 50  // region, type, engine…
+	PriLow    = 30  // supporting detail
+	PriLowest = 10  // tags, messages, long free text — first to go
+)
+
+// markerColWidth is the gutter prepended when IDFn is set: 3 cells so "★✓"
+// fits with a trailing pad.
+const markerColWidth = 3
+
+// colPad is what the bubbles table spends per column *on top of* Column.Width.
+// table.DefaultStyles gives Header and Cell a Padding(0, 1) — one cell either
+// side — so a row costs sum(widths) + 2*len(cols). Forgetting this is how the
+// old fixed layout overshot the pane and wrapped.
+const colPad = 2
+
+// Col is a table column plus the metadata resize() needs to fit it into a
+// pane. It is field-compatible with table.Column (Title/Width) so existing
+// column literals keep working; Width is the *preferred* width, MinWidth the
+// floor when space is tight.
+type Col struct {
+	Title string
+	Width int
+	// MinWidth is the narrowest useful rendering. Zero derives one from the
+	// header text. Clamped to Width.
+	MinWidth int
+	// Priority decides drop order — lower goes first. Zero infers from Title.
+	Priority int
+	// Flex marks a column that soaks up leftover width once every surviving
+	// column has reached its preferred size.
+	Flex bool
+}
+
+func (c Col) min() int {
+	m := c.MinWidth
+	if m <= 0 {
+		m = lipgloss.Width(c.Title)
+		if m < 3 {
+			m = 3
+		}
+	}
+	if m > c.Width {
+		m = c.Width
+	}
+	if m < 1 {
+		m = 1
+	}
+	return m
+}
+
+func (c Col) priority() int {
+	if c.Priority > 0 {
+		return c.Priority
+	}
+	return inferPriority(c.Title)
+}
+
+// inferPriority is the safety net for columns that didn't get an explicit
+// Priority — it keeps a view usable even if someone adds a column and forgets
+// the metadata.
+func inferPriority(title string) int {
+	switch strings.ToUpper(strings.TrimSpace(title)) {
+	case "ID", "LABEL", "NAME", "DOMAIN":
+		return PriPinned
+	case "STATUS", "ACCOUNT", "KIND":
+		return PriHigh
+	case "REGION", "TYPE", "ENGINE":
+		return PriMed
+	case "TAGS", "MESSAGE", "DESCRIPTION", "REV NOTE", "SOA EMAIL", "HOSTNAME":
+		return PriLowest
+	}
+	return PriLow
+}
+
 type listOpts[T any] struct {
 	Deps    Deps
 	Title   string
-	Columns []table.Column
+	Columns []Col
 	Lister  Lister[T]
 	Rower   Rower[T]
 	Matcher Matcher[T]
@@ -72,12 +151,16 @@ type listOpts[T any] struct {
 }
 
 type listLoadedMsg[T any] struct {
-	id    uint64
+	id uint64
+	// gen is the tick generation the fetch was issued under. Only a load from
+	// the current generation is allowed to schedule the next tick — see
+	// listView.tickGen.
+	gen   uint64
 	items []T
 	err   error
 }
 
-type listTickMsg struct{ id uint64 }
+type listTickMsg struct{ id, gen uint64 }
 
 var listSeq atomic.Uint64
 
@@ -93,10 +176,29 @@ type listView[T any] struct {
 	bookmarks   map[string]bool
 	drifts      map[string]bool
 
+	// tickGen guards against tick-chain multiplication. Every refresh trigger
+	// that isn't the tick itself (manual `r`, ActionDoneMsg, drill-in return)
+	// bumps it, which retires the outstanding tick and the outstanding fetch:
+	// stale ticks are dropped on arrival and stale loads don't schedule a
+	// successor. Exactly one chain stays live no matter how many refreshes or
+	// broadcast action results land.
+	tickGen uint64
+
+	// colIdx indexes opts.Columns for the columns currently on screen (the
+	// marker gutter isn't in there); colWidths is the width assigned to each.
+	// hiddenCols counts what didn't fit.
+	colIdx     []int
+	colWidths  []int
+	hiddenCols int
+
 	loading bool
 	err     error
-	w, h    int
-	stamp   time.Time
+	// notice is a transient one-line hint shown in the status bar — used to
+	// tell the user a key isn't supported here instead of swallowing it.
+	// Cleared on the next keypress.
+	notice string
+	w, h   int
+	stamp  time.Time
 }
 
 var (
@@ -111,13 +213,7 @@ var (
 )
 
 func newListView[T any](o listOpts[T]) *listView[T] {
-	cols := o.Columns
-	if o.IDFn != nil {
-		// 3-wide so we can show "★", "✓", or "★✓" right-padded.
-		cols = append([]table.Column{{Title: " ", Width: 3}}, cols...)
-	}
 	t := table.New(
-		table.WithColumns(cols),
 		table.WithFocused(true),
 		table.WithHeight(10),
 	)
@@ -134,7 +230,7 @@ func newListView[T any](o listOpts[T]) *listView[T] {
 		}
 	}
 
-	return &listView[T]{
+	m := &listView[T]{
 		id:          listSeq.Add(1),
 		opts:        o,
 		table:       t,
@@ -144,6 +240,10 @@ func newListView[T any](o listOpts[T]) *listView[T] {
 		drifts:      map[string]bool{},
 		loading:     true,
 	}
+	// Width is unknown until the first WindowSizeMsg; lay out at preferred
+	// widths so the table is well-formed from frame zero.
+	m.layout()
+	return m
 }
 
 func (m *listView[T]) Title() string { return m.opts.Title }
@@ -276,53 +376,41 @@ func (m *listView[T]) Help() []HelpEntry {
 	return out
 }
 
-func (m *listView[T]) Init() tea.Cmd { return tea.Batch(m.fetch(), m.tick()) }
+// Init kicks off the first load only. The poll chain is started by the load
+// that comes back — scheduling a tick here as well would leave two chains
+// running from the very first frame.
+func (m *listView[T]) Init() tea.Cmd { return m.fetch() }
 
 func (m *listView[T]) fetch() tea.Cmd {
+	id, gen := m.id, m.tickGen
 	if m.opts.Deps.Linode == nil {
-		id := m.id
 		return func() tea.Msg {
-			return listLoadedMsg[T]{id: id, err: fmt.Errorf("no linode client configured")}
+			return listLoadedMsg[T]{id: id, gen: gen, err: fmt.Errorf("no linode client configured")}
 		}
 	}
-	id := m.id
 	client := m.opts.Deps.Linode
 	lister := m.opts.Lister
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		items, err := lister(ctx, client)
-		return listLoadedMsg[T]{id: id, items: items, err: err}
+		return listLoadedMsg[T]{id: id, gen: gen, items: items, err: err}
 	}
 }
 
+// refetch retires the current tick chain and any fetch still in flight, then
+// issues a fresh load. The load's response restarts the chain — so a manual
+// `r`, a drill-in return, or an ActionDoneMsg broadcast to every pane each
+// leave exactly one chain behind instead of adding one.
+func (m *listView[T]) refetch() tea.Cmd {
+	m.tickGen++
+	return m.fetch()
+}
+
 func (m *listView[T]) tick() tea.Cmd {
-	var d time.Duration
-	if cfg := m.opts.Deps.Cfg; cfg != nil {
-		if name := m.opts.Deps.CtxString("view_name"); name != "" {
-			if acct, ok := cfg.Accounts[cfg.DefaultAccount]; ok {
-				if v, ok := acct.RefreshOverrides[name]; ok && v > 0 {
-					d = v
-				}
-			}
-			if d <= 0 {
-				if v, ok := cfg.RefreshOverrides[name]; ok && v > 0 {
-					d = v
-				}
-			}
-		}
-	}
-	if d <= 0 {
-		d = m.opts.Refresh
-	}
-	if d <= 0 && m.opts.Deps.Cfg != nil {
-		d = m.opts.Deps.Cfg.Refresh
-	}
-	if d <= 0 {
-		d = 2 * time.Second
-	}
-	id := m.id
-	return tea.Tick(d, func(time.Time) tea.Msg { return listTickMsg{id: id} })
+	d := refreshInterval(m.opts.Deps, m.opts.Deps.CtxString("view_name"), m.opts.Refresh)
+	id, gen := m.id, m.tickGen
+	return tea.Tick(d, func(time.Time) tea.Msg { return listTickMsg{id: id, gen: gen} })
 }
 
 func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -358,13 +446,18 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applyFilter()
 			focusCmd = m.consumeFocusID()
 		}
+		if msg.gen != m.tickGen {
+			// A newer refresh already took over the chain; this load's data is
+			// still good but it must not schedule a second tick.
+			return m, focusCmd
+		}
 		if focusCmd != nil {
 			return m, tea.Batch(m.tick(), focusCmd)
 		}
 		return m, m.tick()
 
 	case listTickMsg:
-		if msg.id != m.id {
+		if msg.id != m.id || msg.gen != m.tickGen {
 			return m, nil
 		}
 		return m, m.fetch()
@@ -384,7 +477,7 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.cleanup()
 		}
 		m.loading = true
-		return m, m.fetch()
+		return m, m.refetch()
 
 	case tools.ExitMsg:
 		// Surface drilled-in tool errors so a failed lish/k9s launch isn't
@@ -396,8 +489,9 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ActionDoneMsg:
+		// Broadcast to every pane, so this must not add a chain per pane.
 		m.loading = true
-		return m, m.fetch()
+		return m, m.refetch()
 
 	case ActionErrorMsg:
 		m.err = msg.Err
@@ -407,6 +501,8 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.filtering {
 			return m.updateFilter(msg)
 		}
+		// Any keypress dismisses the previous transient hint.
+		m.notice = ""
 		switch {
 		case key.Matches(msg, keyFilter):
 			m.filtering = true
@@ -414,7 +510,7 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, textinput.Blink
 		case key.Matches(msg, keyRefresh):
 			m.loading = true
-			return m, m.fetch()
+			return m, m.refetch()
 		case key.Matches(msg, keyDetail):
 			it, ok := m.SelectedItem()
 			if !ok {
@@ -434,6 +530,7 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, keyEnter):
 			if m.opts.OnEnter == nil {
+				m.notice = "this view doesn't support drill-in (enter)"
 				return m, nil
 			}
 			it, ok := m.SelectedItem()
@@ -443,6 +540,7 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.opts.OnEnter(it, m.opts.Deps)
 		case key.Matches(msg, keyToggleSel):
 			if m.opts.IDFn == nil {
+				m.notice = "this view doesn't support row selection"
 				return m, nil
 			}
 			it, ok := m.SelectedItem()
@@ -460,7 +558,17 @@ func (m *listView[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keyBulkDel):
 			return m, m.bulkDelete()
 		case key.Matches(msg, keyBookmark):
+			// A view can define its own `*` semantics — the watchlist does,
+			// because its rows are cross-kind and unstarring has to reach into
+			// whichever kind the row came from.
+			if handler, ok := m.opts.KeyHandlers["*"]; ok {
+				if it, ok := m.SelectedItem(); ok {
+					return m, handler(it, m.opts.Deps)
+				}
+				return m, nil
+			}
 			if m.opts.IDFn == nil || m.opts.BookmarkKind == "" {
+				m.notice = "this view doesn't support bookmarks"
 				return m, nil
 			}
 			it, ok := m.SelectedItem()
@@ -537,40 +645,56 @@ func (m *listView[T]) applyFilter() {
 		if needle != "" && !m.matches(it, needle) {
 			continue
 		}
-		row := m.opts.Rower(it)
-		if needle != "" {
-			for i, cell := range row {
-				width := 0
-				if i < len(m.opts.Columns) {
-					width = m.opts.Columns[i].Width
-				}
-				row[i] = highlightMatch(cell, needle, hlStyle, width)
-			}
-		}
+		full := m.opts.Rower(it)
+		row := make(table.Row, 0, len(m.colIdx)+1)
 		if m.opts.IDFn != nil {
 			id := m.opts.IDFn(it)
-			marker := makeRowMarker(m.bookmarks[id], m.selected[id], m.drifts[id])
-			row = append(table.Row{marker}, row...)
+			row = append(row, makeRowMarker(m.bookmarks[id], m.selected[id], m.drifts[id]))
+		}
+		// Emit exactly one cell per *surviving* column, in screen order. A row
+		// longer than the column set makes bubbles' renderRow index past the
+		// end of its column slice.
+		for i, ci := range m.colIdx {
+			cell := ""
+			if ci < len(full) {
+				cell = full[ci]
+			}
+			if needle != "" {
+				cell = highlightMatch(cell, needle, hlStyle, m.colWidths[i])
+			}
+			row = append(row, cell)
 		}
 		rows = append(rows, row)
 	}
 	m.table.SetRows(rows)
+	// bubbles' SetRows only clamps the cursor downward, so after an empty
+	// intermediate state (a column relayout clears the rows) it can be stuck
+	// at -1 and SelectedRow would return nil forever.
+	if len(rows) > 0 && m.table.Cursor() < 0 {
+		m.table.SetCursor(0)
+	}
 }
 
 // highlightMatch wraps every case-insensitive needle hit in s with hlStyle.
-// If s would be truncated by the column (its rune width exceeds maxWidth), we
-// skip — runewidth.Truncate inside bubbles/table doesn't strip ANSI, and
-// truncating mid-escape mangles the row. maxWidth=0 disables the guard.
+//
+// Order matters: the cell is truncated to the column width *first*, while it's
+// still plain text, and styled after. The other way round — style, then let
+// bubbles/table run runewidth.Truncate over the result — cuts through an ANSI
+// escape whenever a match sits near the column edge, and the colour bleeds
+// across the rest of the row. maxWidth=0 means "don't truncate".
 func highlightMatch(s, needle string, hlStyle lipgloss.Style, maxWidth int) string {
 	if needle == "" || s == "" {
 		return s
 	}
-	if maxWidth > 0 && len(s) > maxWidth {
-		return s
+	if maxWidth > 0 {
+		s = truncateCells(s, maxWidth)
 	}
 	lower := strings.ToLower(s)
 	n := strings.ToLower(needle)
 	var b strings.Builder
+	// Byte indices throughout: strings.Index returns them and lower/s share a
+	// layout for the ASCII-folding done by ToLower, so multi-byte labels are
+	// matched and sliced correctly rather than skipped.
 	for i := 0; i < len(lower); {
 		idx := strings.Index(lower[i:], n)
 		if idx < 0 {
@@ -578,19 +702,198 @@ func highlightMatch(s, needle string, hlStyle lipgloss.Style, maxWidth int) stri
 			break
 		}
 		b.WriteString(s[i : i+idx])
-		b.WriteString(hlStyle.Render(s[i+idx : i+idx+len(needle)]))
-		i += idx + len(needle)
+		end := i + idx + len(n)
+		if end > len(s) {
+			end = len(s)
+		}
+		b.WriteString(hlStyle.Render(s[i+idx : end]))
+		i = end
 	}
 	return b.String()
 }
 
+// truncateCells cuts s to at most max terminal cells, appending "…" when it
+// had to cut. Rune- and width-aware (CJK/emoji count as two cells), which
+// len(s) is not.
+func truncateCells(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= max {
+		return s
+	}
+	limit := max - 1 // room for the ellipsis
+	var b strings.Builder
+	used := 0
+	for _, r := range s {
+		w := lipgloss.Width(string(r))
+		if used+w > limit {
+			break
+		}
+		b.WriteRune(r)
+		used += w
+	}
+	return b.String() + "…"
+}
+
 func (m *listView[T]) resize() {
+	// A relayout round-trips the rows through empty, which drops the cursor.
+	cursor := m.table.Cursor()
+	m.layout()
+	if m.w > 0 {
+		// Without a width the table's viewport never clips and long rows wrap,
+		// scrambling every line below them.
+		m.table.SetWidth(m.w)
+	}
 	h := m.h - 4
 	if h < 5 {
 		h = 5
 	}
 	m.table.SetHeight(h)
-	m.filterInput.Width = m.w - 4
+	w := m.w - 4
+	if w < 10 {
+		w = 10
+	}
+	m.filterInput.Width = w
+	m.applyFilter()
+	if cursor > 0 {
+		m.table.SetCursor(cursor)
+	}
+}
+
+// layout picks which columns fit in the current pane width and how wide each
+// one gets. Columns are dropped lowest-priority-first (rightmost breaks ties)
+// until the minimum widths fit; the leftover is spent first bringing survivors
+// up to their preferred width, then padding out the Flex columns.
+func (m *listView[T]) layout() {
+	all := m.opts.Columns
+	keep := make([]int, 0, len(all))
+	widths := make([]int, 0, len(all))
+
+	avail := m.w
+	if m.opts.IDFn != nil {
+		avail -= markerColWidth + colPad
+	}
+	if m.w <= 0 || avail <= 0 {
+		// No size yet (first frame, tests): everything at preferred width.
+		for i, c := range all {
+			keep = append(keep, i)
+			widths = append(widths, c.Width)
+		}
+		m.setCols(keep, widths)
+		return
+	}
+
+	total := 0
+	for i, c := range all {
+		keep = append(keep, i)
+		widths = append(widths, c.min())
+		total += c.min() + colPad
+	}
+
+	for total > avail {
+		victim := -1
+		for pos, ci := range keep {
+			if all[ci].priority() >= PriPinned {
+				continue
+			}
+			// <= so ties resolve to the rightmost column, which is where the
+			// least interesting data tends to live.
+			if victim < 0 || all[ci].priority() <= all[keep[victim]].priority() {
+				victim = pos
+			}
+		}
+		if victim < 0 {
+			// Only pinned columns left and they still don't fit: keep them at
+			// their minimum and let SetWidth clip. This is the phone-sized
+			// terminal case — ID + LABEL, nothing else.
+			break
+		}
+		total -= widths[victim] + colPad
+		keep = append(keep[:victim], keep[victim+1:]...)
+		widths = append(widths[:victim], widths[victim+1:]...)
+	}
+
+	slack := avail - total
+	if slack > 0 {
+		// Grow toward preferred widths, proportional to how short each is.
+		deficit := 0
+		for i, ci := range keep {
+			if d := all[ci].Width - widths[i]; d > 0 {
+				deficit += d
+			}
+		}
+		if deficit > 0 {
+			give := min(slack, deficit)
+			handed := 0
+			for i, ci := range keep {
+				d := all[ci].Width - widths[i]
+				if d <= 0 {
+					continue
+				}
+				share := give * d / deficit
+				widths[i] += share
+				handed += share
+			}
+			for i, ci := range keep {
+				for handed < give && widths[i] < all[ci].Width {
+					widths[i]++
+					handed++
+				}
+			}
+			slack -= handed
+		}
+	}
+	if slack > 0 {
+		// Whatever is still free goes to the Flex columns, proportionally.
+		flexTotal := 0
+		for _, ci := range keep {
+			if all[ci].Flex {
+				flexTotal += max(all[ci].Width, 1)
+			}
+		}
+		if flexTotal > 0 {
+			handed := 0
+			for i, ci := range keep {
+				if !all[ci].Flex {
+					continue
+				}
+				share := slack * max(all[ci].Width, 1) / flexTotal
+				widths[i] += share
+				handed += share
+			}
+			for i, ci := range keep {
+				if handed >= slack {
+					break
+				}
+				if !all[ci].Flex {
+					continue
+				}
+				widths[i] += slack - handed
+				handed = slack
+			}
+		}
+	}
+	m.setCols(keep, widths)
+}
+
+// setCols installs a column layout on the table. Rows are cleared first:
+// SetColumns re-renders immediately, and the rows still in the model carry a
+// cell per *old* column, which would index past the new (shorter) column
+// slice. applyFilter repopulates them.
+func (m *listView[T]) setCols(idx, widths []int) {
+	m.colIdx, m.colWidths = idx, widths
+	m.hiddenCols = len(m.opts.Columns) - len(idx)
+	cols := make([]table.Column, 0, len(idx)+1)
+	if m.opts.IDFn != nil {
+		// 3-wide so we can show "★", "✓", or "★✓" right-padded.
+		cols = append(cols, table.Column{Title: " ", Width: markerColWidth})
+	}
+	for i, ci := range idx {
+		cols = append(cols, table.Column{Title: m.opts.Columns[ci].Title, Width: widths[i]})
+	}
+	m.table.SetRows(nil)
+	m.table.SetColumns(cols)
 }
 
 // consumeFocusID looks for a "focus_id" hint in Deps.Context. If present and
@@ -693,9 +996,6 @@ func (m *listView[T]) persistBookmarks() {
 }
 
 func (m *listView[T]) bulkDelete() tea.Cmd {
-	if m.opts.IDFn == nil || len(m.selected) == 0 {
-		return nil
-	}
 	var action *Action[T]
 	for i := range m.opts.Actions {
 		if m.opts.Actions[i].Key == "d" {
@@ -704,7 +1004,15 @@ func (m *listView[T]) bulkDelete() tea.Cmd {
 		}
 	}
 	if action == nil {
-		m.err = fmt.Errorf("no delete action on this view")
+		m.notice = "this view doesn't support delete"
+		return nil
+	}
+	if m.opts.IDFn == nil {
+		m.notice = "this view doesn't support row selection"
+		return nil
+	}
+	if len(m.selected) == 0 {
+		m.notice = "nothing selected — space toggles the highlighted row"
 		return nil
 	}
 	items := m.selectedItemsList()
@@ -834,35 +1142,26 @@ func errString(err error) string {
 }
 
 func (m *listView[T]) drillIn(msg DrillInMsg) tea.Cmd {
-	runner := tools.New(m.opts.Deps.Cfg)
-	// IMPORTANT: don't pass a short-lived ctx here. runner.Run builds an
-	// exec.CommandContext(ctx, …) and returns it wrapped in tea.ExecProcess
-	// — Bubble Tea invokes the wrapped command later, so the ctx must
-	// remain live for the duration of the drilled-in tool. A 30-second
-	// timeout + immediate cancel() cancelled the command before it could
-	// start (visible as "press c, screen flickers, nothing opens").
-	exec, err := runner.RunWithEnv(context.Background(), msg.Tool, msg.Vars, msg.Env)
+	id := m.id
+	cmd, err := RunDrillIn(m.opts.Deps, msg, func(cleanup func()) tea.Msg {
+		return drillinDoneMsg{id: id, cleanup: cleanup}
+	})
 	if err != nil {
-		if missing, ok := tools.IsToolMissing(err); ok {
-			return func() tea.Msg { return InstallNeededMsg{Kind: missing.Kind, Drill: msg} }
-		}
-		if msg.Cleanup != nil {
-			msg.Cleanup()
-		}
 		m.err = err
 		return nil
 	}
-	id := m.id
-	cleanup := msg.Cleanup
-	return tea.Sequence(exec, func() tea.Msg {
-		return drillinDoneMsg{id: id, cleanup: cleanup}
-	})
+	return cmd
 }
 
 func (m *listView[T]) View() string {
 	th := m.opts.Deps.Theme
 	mutedStyle := lipgloss.NewStyle().Foreground(th.Muted)
 	errorStyle := lipgloss.NewStyle().Foreground(th.Error)
+	warnStyle := lipgloss.NewStyle().Foreground(th.Warn)
+
+	title := strings.ToLower(m.opts.Title)
+	filtered := m.Filtering() && strings.TrimSpace(m.filterInput.Value()) != ""
+	visible := len(m.visibleItems())
 
 	var status string
 	switch {
@@ -871,18 +1170,38 @@ func (m *listView[T]) View() string {
 	case m.loading && len(m.items) == 0:
 		status = mutedStyle.Render("loading…")
 	default:
-		s := fmt.Sprintf("%d %s · refreshed %s ago",
-			len(m.items), strings.ToLower(m.opts.Title), time.Since(m.stamp).Truncate(time.Second))
+		count := fmt.Sprintf("%d %s", len(m.items), title)
+		if filtered {
+			count = fmt.Sprintf("%d/%d %s", visible, len(m.items), title)
+		}
+		s := fmt.Sprintf("%s · refreshed %s ago", count, time.Since(m.stamp).Truncate(time.Second))
 		if n := len(m.selected); n > 0 {
 			s = fmt.Sprintf("%d selected · ", n) + s
 		}
 		status = mutedStyle.Render(s)
 	}
+	if m.hiddenCols > 0 {
+		status += warnStyle.Render(fmt.Sprintf("  »%d cols hidden — widen terminal", m.hiddenCols))
+	}
+	if m.notice != "" {
+		status += warnStyle.Render("  " + m.notice)
+	}
 
-	parts := []string{m.table.View(), status}
+	parts := []string{m.table.View()}
+	// An empty table is just a header row and dead space — say why.
+	switch {
+	case m.err == nil && !m.loading && len(m.items) == 0:
+		parts = append(parts, mutedStyle.Render(fmt.Sprintf("no %s found — press r to refresh", title)))
+	case m.err == nil && filtered && visible == 0:
+		parts = append(parts, mutedStyle.Render(
+			fmt.Sprintf("no %s match %q — esc clears the filter", title, strings.TrimSpace(m.filterInput.Value()))))
+	}
+	// The filter input belongs directly under the table it filters; below the
+	// status line it lands on the last row of the pane and gets clipped.
 	if m.filtering || m.filterInput.Value() != "" {
 		parts = append(parts, m.filterInput.View())
 	}
+	parts = append(parts, status)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 

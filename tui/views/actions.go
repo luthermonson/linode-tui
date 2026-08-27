@@ -2,6 +2,7 @@ package views
 
 import (
 	"context"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -180,4 +181,74 @@ type InstallErrorMsg struct {
 type drillinDoneMsg struct {
 	id      uint64
 	cleanup func()
+}
+
+// RunDrillIn invokes the tools runner for a DrillInMsg. Both listView and the
+// detail views funnel through here so the two tricky invariants live in one
+// place:
+//
+//  1. context.Background(), never a timeout-bounded ctx. runner.RunWithEnv
+//     builds an exec.CommandContext and hands it back wrapped in
+//     tea.ExecProcess — Bubble Tea invokes that later, so a ctx cancelled on
+//     return kills the tool before it starts (symptom: screen flickers,
+//     nothing opens).
+//  2. Cleanup is *deferred onto the done message*, never called inside the
+//     tea.Sequence closure. tea.Sequence runs each command's function
+//     immediately and only Sends the result; calling cleanup there deletes
+//     e.g. the kubeconfig before k9s reads it (issue #2).
+//
+// done builds the view-specific "tool exited" message from the (possibly nil)
+// cleanup func. A missing tool yields an InstallNeededMsg carrying the drill
+// so the root model can install and replay it; any other error runs Cleanup
+// immediately (nothing is going to run) and comes back as a non-nil error for
+// the caller to surface on its own error field.
+func RunDrillIn(deps Deps, msg DrillInMsg, done func(cleanup func()) tea.Msg) (tea.Cmd, error) {
+	runner := tools.New(deps.Cfg)
+	exec, err := runner.RunWithEnv(context.Background(), msg.Tool, msg.Vars, msg.Env)
+	if err != nil {
+		if missing, ok := tools.IsToolMissing(err); ok {
+			return func() tea.Msg { return InstallNeededMsg{Kind: missing.Kind, Drill: msg} }, nil
+		}
+		if msg.Cleanup != nil {
+			msg.Cleanup()
+		}
+		return nil, err
+	}
+	cleanup := msg.Cleanup
+	return tea.Sequence(exec, func() tea.Msg { return done(cleanup) }), nil
+}
+
+// refreshInterval resolves the poll interval for a view. Precedence, highest
+// first: the active account's RefreshOverrides[viewName], the global
+// RefreshOverrides[viewName], the view's own fallback, cfg.Refresh, then a
+// 2s floor. Shared by listView and the detail views so `:set refresh` and
+// per-view overrides apply everywhere instead of only to lists.
+func refreshInterval(deps Deps, viewName string, fallback time.Duration) time.Duration {
+	var d time.Duration
+	if cfg := deps.Cfg; cfg != nil {
+		if viewName != "" {
+			if acct, ok := cfg.Accounts[cfg.DefaultAccount]; ok {
+				if v, ok := acct.RefreshOverrides[viewName]; ok && v > 0 {
+					d = v
+				}
+			}
+			if d <= 0 {
+				if v, ok := cfg.RefreshOverrides[viewName]; ok && v > 0 {
+					d = v
+				}
+			}
+		}
+		if d <= 0 {
+			d = fallback
+		}
+		if d <= 0 {
+			d = cfg.Refresh
+		}
+	} else {
+		d = fallback
+	}
+	if d <= 0 {
+		d = 2 * time.Second
+	}
+	return d
 }

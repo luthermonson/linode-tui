@@ -24,16 +24,16 @@ func newDatabases(d Deps) View {
 	return newListView(listOpts[linodego.Database]{
 		Deps:  d,
 		Title: "Databases",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 28},
-			{Title: "ENGINE", Width: 12},
-			{Title: "VERSION", Width: 10},
-			{Title: "REGION", Width: 14},
-			{Title: "STATUS", Width: 12},
-			{Title: "NODES", Width: 6},
-			{Title: "PORT", Width: 6},
-			{Title: "HOST", Width: 40},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 28, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "ENGINE", Width: 12, MinWidth: 7, Priority: PriMed},
+			{Title: "VERSION", Width: 10, MinWidth: 7, Priority: PriLow},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "NODES", Width: 6, MinWidth: 5, Priority: PriLow},
+			{Title: "PORT", Width: 6, MinWidth: 5, Priority: PriLow},
+			{Title: "HOST", Width: 40, MinWidth: 16, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.Database, error) {
 			return c.Raw().ListDatabases(ctx, nil)

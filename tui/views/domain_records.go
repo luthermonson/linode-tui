@@ -25,15 +25,15 @@ func newDomainRecords(d Deps) View {
 	return newListView(listOpts[linodego.DomainRecord]{
 		Deps:  d,
 		Title: title,
-		Columns: []table.Column{
-			{Title: "ID", Width: 12},
-			{Title: "TYPE", Width: 8},
-			{Title: "NAME", Width: 24},
-			{Title: "TARGET", Width: 36},
-			{Title: "TTL", Width: 8},
-			{Title: "PRI", Width: 6},
-			{Title: "WEIGHT", Width: 8},
-			{Title: "PORT", Width: 6},
+		Columns: []Col{
+			{Title: "ID", Width: 12, MinWidth: 6, Priority: PriPinned},
+			{Title: "TYPE", Width: 8, MinWidth: 5, Priority: PriHigh},
+			{Title: "NAME", Width: 24, MinWidth: 10, Priority: PriPinned, Flex: true},
+			{Title: "TARGET", Width: 36, MinWidth: 12, Priority: PriHigh, Flex: true},
+			{Title: "TTL", Width: 8, MinWidth: 4, Priority: PriLow},
+			{Title: "PRI", Width: 6, MinWidth: 3, Priority: PriLowest},
+			{Title: "WEIGHT", Width: 8, MinWidth: 6, Priority: PriLowest},
+			{Title: "PORT", Width: 6, MinWidth: 4, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.DomainRecord, error) {
 			if domainID == 0 {

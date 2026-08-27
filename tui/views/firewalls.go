@@ -20,12 +20,12 @@ func newFirewalls(d Deps) View {
 	return newListView(listOpts[linodego.Firewall]{
 		Deps:  d,
 		Title: "Firewalls",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 32},
-			{Title: "STATUS", Width: 12},
-			{Title: "ENTITIES", Width: 10},
-			{Title: "TAGS", Width: 32},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 32, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "ENTITIES", Width: 10, MinWidth: 6, Priority: PriMed},
+			{Title: "TAGS", Width: 32, MinWidth: 8, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.Firewall, error) {
 			return c.Raw().ListFirewalls(ctx, nil)

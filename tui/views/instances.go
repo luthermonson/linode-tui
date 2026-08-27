@@ -22,14 +22,14 @@ func newInstances(d Deps) View {
 	return newListView(listOpts[linodego.Instance]{
 		Deps:  d,
 		Title: "Linodes",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 28},
-			{Title: "REGION", Width: 14},
-			{Title: "TYPE", Width: 18},
-			{Title: "STATUS", Width: 12},
-			{Title: "IPv4", Width: 16},
-			{Title: "TAGS", Width: 24},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 28, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "TYPE", Width: 18, MinWidth: 10, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "IPv4", Width: 16, MinWidth: 12, Priority: PriLow},
+			{Title: "TAGS", Width: 24, MinWidth: 8, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.Instance, error) {
 			return c.Raw().ListInstances(ctx, nil)
