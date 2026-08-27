@@ -33,7 +33,7 @@ func renderHelp(th theme.Theme, current views.View, filter string, layouts map[s
 
 	var b strings.Builder
 	if filter != "" {
-		b.WriteString(muted.Render("filter: " + filter + " (esc to clear)") + "\n\n")
+		b.WriteString(muted.Render("filter: "+filter+" (esc to clear)") + "\n\n")
 	}
 	if s := section("Global", th.Primary, globalHelp); s != "" {
 		b.WriteString(s + "\n")
@@ -115,35 +115,49 @@ var auditHelp = []views.HelpEntry{
 	{Key: ":undo [step]", Desc: "inspect or execute the inverse of an audit entry"},
 }
 
-var cmdBarHelp = []views.HelpEntry{
-	{Key: ":account [name]", Desc: "list accounts or switch (re-resolves token)"},
-	{Key: ":theme <name> | list", Desc: "switch theme (dark|light|dracula|solarized-light|gruvbox-dark|gruvbox-light) or preview swatches"},
-	{Key: ":refresh [view] <dur|off>", Desc: "set global / per-view interval, or :refresh defaults for the preset"},
-	{Key: ":split <view>", Desc: "open a secondary pane next to current"},
-	{Key: ":pane <slot> <view>", Desc: "swap one pane (primary | secondary | tertiary | quaternary)"},
-	{Key: ":unsplit", Desc: "collapse all secondary panes"},
-	{Key: ":layout save|load|list|delete|rename <name>", Desc: "manage saved pane layouts"},
-	{Key: ":layout export|import|export-all|import-all", Desc: "round-trip layouts as YAML"},
-	{Key: ":layout import-from <url> [name]", Desc: "fetch a layout (verifies optional ?sha256=…)"},
-	{Key: ":layout pin|share <name> <url>", Desc: "render an import-from URL with the digest appended"},
-	{Key: ":fold-char <ch|reset>", Desc: "prefix for folded pane labels (default '+')"},
-	{Key: ":bookmark list|export|import|migrate|mv|clear|scope", Desc: "manage bookmarks (per-account or global)"},
-	{Key: ":doctor [section] [group=name] [--json|fix]", Desc: "run health checks"},
-	{Key: ":validate", Desc: "re-run the validate-config warning set"},
-	{Key: ":config show | path", Desc: "view redacted YAML / resolved path"},
-	{Key: ":cache size | prune <subdir|all>", Desc: "inspect or trim ~/.cache/linode-tui"},
-	{Key: ":audit [tail|recent|grep|purge|clear|count]", Desc: "audit log gestures"},
-	{Key: ":undo [step N] [execute]", Desc: "dry-run / execute the inverse of an audit entry"},
-	{Key: ":diff snapshot <kind> <id> [@N]", Desc: "live JSON vs stored snapshot"},
-	{Key: ":open <resource> [id]", Desc: "JSON of one resource in a detail modal"},
-	{Key: ":stats [post|reset|reset all]", Desc: "view / send / clear local counters"},
-	{Key: ":tools dir | upgrade [kind] | relocate <dir>", Desc: "external tool management"},
-	{Key: ":new linode|nodebalancer|volume|vpc|lke", Desc: "open the create form"},
-	{Key: ":clear-account [dry-run]", Desc: "DESTRUCTIVE: wipe every resource on the active account (typed confirm)"},
-	{Key: ":read-only", Desc: "toggle the session-wide mutation block"},
-	{Key: ":mouse [on|off]", Desc: "toggle mouse wheel-scroll (OFF lets your terminal select & copy text)"},
-	{Key: ":replay-last [step N]", Desc: "inspect the most recent audit entry (ctrl+y)"},
-	{Key: "tab in cmdbar", Desc: "autocomplete the current verb to the longest match"},
+var cmdBarHelp = buildCmdBarHelp()
+
+func buildCmdBarHelp() []views.HelpEntry {
+	// Built from theme.Names() so adding a palette can't leave the help
+	// listing a stale set.
+	return []views.HelpEntry{
+		{Key: ":account [name]", Desc: "list accounts or switch (re-resolves token)"},
+		{Key: ":theme <name> | list", Desc: "switch theme (" + strings.Join(theme.Names(), "|") + ") or preview swatches"},
+		{Key: ":refresh [view] <dur|off>", Desc: "set global / per-view interval, or :refresh defaults for the preset"},
+		{Key: ":split <view>", Desc: "open a secondary pane next to current"},
+		{Key: ":split-right|:split-down <view>", Desc: "add a tertiary / quaternary pane to an existing split"},
+		{Key: ":split-preview [follow]", Desc: "JSON of the focused row in the secondary pane; follow re-fetches"},
+		{Key: ":pane <slot> <view>", Desc: "swap one pane (primary | secondary | tertiary | quaternary)"},
+		{Key: ":unsplit", Desc: "collapse all secondary panes"},
+		{Key: ":fanout <kind> [accounts]", Desc: "one view across every configured account"},
+		{Key: ":layout save|load|list|delete|rename <name>", Desc: "manage saved pane layouts"},
+		{Key: ":layout export|import|export-all|import-all", Desc: "round-trip layouts as YAML"},
+		{Key: ":layout import-from <url> [name]", Desc: "fetch a layout (verifies optional ?sha256=…)"},
+		{Key: ":layout pin|share <name> <url>", Desc: "render an import-from URL with the digest appended"},
+		{Key: ":fold-char <ch|reset>", Desc: "prefix for folded pane labels (default '+')"},
+		{Key: ":bookmark list|export|import|migrate|mv|clear|scope", Desc: "manage bookmarks (per-account or global)"},
+		{Key: ":doctor [section] [group=name] [--json|fix]", Desc: "run health checks"},
+		{Key: ":validate", Desc: "re-run the validate-config warning set"},
+		{Key: ":config show | path", Desc: "view redacted YAML / resolved path"},
+		{Key: ":cache size | prune <subdir|all>", Desc: "inspect or trim ~/.cache/linode-tui"},
+		{Key: ":audit [tail|recent|grep|purge|clear|count]", Desc: "audit log gestures"},
+		{Key: ":undo [step N] [execute]", Desc: "dry-run / execute the inverse of an audit entry"},
+		{Key: ":diff snapshot <kind> <id> [@N]", Desc: "live JSON vs stored snapshot"},
+		{Key: ":snapshots <kind> <id>", Desc: "list stored snapshot versions for one resource"},
+		{Key: ":open <resource> [id]", Desc: "JSON of one resource in a detail modal"},
+		{Key: ":stats [post|reset|reset all]", Desc: "view / send / clear local counters"},
+		{Key: ":tools dir | upgrade [kind] | relocate <dir>", Desc: "external tool management"},
+		{Key: ":new linode|nodebalancer|volume|vpc|lke", Desc: "open the create form"},
+		{Key: ":clear-account [dry-run]", Desc: "DESTRUCTIVE: wipe every resource on the active account (typed confirm)"},
+		{Key: ":read-only", Desc: "toggle the session-wide mutation block"},
+		{Key: ":mouse [on|off]", Desc: "toggle mouse wheel-scroll (OFF lets your terminal select & copy text)"},
+		{Key: ":replay-last [step N] [execute]", Desc: "inspect (or reverse) the most recent audit entry — same flow as ctrl+y"},
+		{Key: ":replay-from <date> [execute]", Desc: "inspect (or reverse) the oldest audit entry on/after a date"},
+		{Key: ":configure tags <csv>", Desc: "set tags on the focused row without opening the form"},
+		{Key: ":reload", Desc: "re-read the config file and rebuild every pane"},
+		{Key: ":log", Desc: "scroll back through this session's status messages"},
+		{Key: "tab in cmdbar", Desc: "autocomplete the current verb to the longest match"},
+	}
 }
 
 // viewHelp lists the resource views reachable as `:<name>` — populated from

@@ -7,6 +7,12 @@ func Default() *Config {
 		ActiveTheme: "dark",
 		Refresh:     2 * time.Second,
 		Accounts:    map[string]Account{},
+		// 0 means "keep forever" (documented in docs/USAGE.md and on the
+		// struct field), so the 90-day retention has to be seeded here rather
+		// than inferred at startup — otherwise an explicit `0` and an absent
+		// key are indistinguishable. Load() starts from Default() and lets the
+		// file overwrite it, so a config that says 0 really does mean forever.
+		AuditRetentionDays: 90,
 		Tools: Tools{
 			// empty so first install auto-picks a writable PATH dir under $HOME
 			// (falling back to UserCacheDir) and persists the choice.
