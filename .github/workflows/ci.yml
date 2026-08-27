@@ -92,12 +92,12 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: GoReleaser check
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
           args: check
       - name: GoReleaser snapshot build
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
           args: build --snapshot --clean --single-target
