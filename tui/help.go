@@ -141,6 +141,7 @@ var cmdBarHelp = []views.HelpEntry{
 	{Key: ":new linode|nodebalancer|volume|vpc|lke", Desc: "open the create form"},
 	{Key: ":clear-account [dry-run]", Desc: "DESTRUCTIVE: wipe every resource on the active account (typed confirm)"},
 	{Key: ":read-only", Desc: "toggle the session-wide mutation block"},
+	{Key: ":mouse [on|off]", Desc: "toggle mouse wheel-scroll (OFF lets your terminal select & copy text)"},
 	{Key: ":replay-last [step N]", Desc: "inspect the most recent audit entry (ctrl+y)"},
 	{Key: "tab in cmdbar", Desc: "autocomplete the current verb to the longest match"},
 }

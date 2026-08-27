@@ -37,6 +37,11 @@ type Config struct {
 	// ReadOnly toggles a session-wide gate that blocks every mutating
 	// command-bar action. Persisted so :read-only sticks across launches.
 	ReadOnly bool `yaml:"read_only,omitempty"`
+	// Mouse enables terminal mouse reporting (wheel-scroll in lists). It's OFF
+	// by default because capturing the mouse disables the terminal's own
+	// text selection — double-click/drag to highlight and copy stop working.
+	// Toggle live with :mouse; persisted so the choice sticks across launches.
+	Mouse bool `yaml:"mouse,omitempty"`
 	// Fold breakpoints — override the built-in width/height thresholds that
 	// hide the secondary, tertiary, and quaternary panes when the terminal
 	// is small.

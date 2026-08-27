@@ -238,6 +238,7 @@ The drill-in's own verb works too (`:lke_detail 1234`).
 | `:tools dir` / `:tools upgrade [kind]` / `:tools relocate <dir>` | External tool management |
 | `:new linode\|nodebalancer\|volume\|vpc\|lke` | Open a create form |
 | `:read-only` | Toggle the session-wide mutation block |
+| `:mouse` / `:mouse on\|off` | Toggle mouse wheel-scroll. **OFF by default** — capturing the mouse disables your terminal's native text selection (double-click/drag to highlight and copy). Turn it OFF to select & copy; ON to wheel-scroll lists. Persisted (`mouse:` in config). |
 | `:stats` / `:stats post` / `:stats reset [all]` | View / send / clear local counters |
 
 ---
