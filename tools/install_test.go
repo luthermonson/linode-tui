@@ -55,43 +55,52 @@ func TestExtractBinaryUnsupportedFormat(t *testing.T) {
 	}
 }
 
+// Real checksum entries are 64 hex chars (sha256); lookupChecksum now
+// enforces that shape (see TestLookupChecksumMalformed*), so fixtures below
+// use full-length placeholder sums instead of the old truncated "abc123"
+// style.
+var (
+	sumA = strings.Repeat("0123456789abcdef", 4) // 64 hex chars
+	sumB = strings.Repeat("fedcba9876543210", 4) // 64 hex chars
+)
+
 func TestLookupChecksumGitHubStyle(t *testing.T) {
 	// goreleaser-style: "<sha256>  <filename>"
-	file := []byte("abc123  k9s_Linux_amd64.tar.gz\nxyz789  k9s_Darwin_amd64.tar.gz\n")
+	file := []byte(sumA + "  k9s_Linux_amd64.tar.gz\n" + sumB + "  k9s_Darwin_amd64.tar.gz\n")
 	got, err := lookupChecksum(file, "k9s_Linux_amd64.tar.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "abc123" {
-		t.Fatalf("got %q want abc123", got)
+	if got != sumA {
+		t.Fatalf("got %q want %q", got, sumA)
 	}
 }
 
 func TestLookupChecksumSha256sumStyle(t *testing.T) {
 	// sha256sum-style with "*" binary marker
-	file := []byte("deadbeef *lazysql_Linux_x86_64.tar.gz\n")
+	file := []byte(sumA + " *lazysql_Linux_x86_64.tar.gz\n")
 	got, err := lookupChecksum(file, "lazysql_Linux_x86_64.tar.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "deadbeef" {
-		t.Fatalf("got %q want deadbeef", got)
+	if got != sumA {
+		t.Fatalf("got %q want %q", got, sumA)
 	}
 }
 
 func TestLookupChecksumDotSlashStyle(t *testing.T) {
-	file := []byte("cafebabe  ./k9s_Linux_arm64.tar.gz\n")
+	file := []byte(sumA + "  ./k9s_Linux_arm64.tar.gz\n")
 	got, err := lookupChecksum(file, "k9s_Linux_arm64.tar.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "cafebabe" {
-		t.Fatalf("got %q want cafebabe", got)
+	if got != sumA {
+		t.Fatalf("got %q want %q", got, sumA)
 	}
 }
 
 func TestLookupChecksumNotFound(t *testing.T) {
-	file := []byte("abc  some-other.tar.gz\n")
+	file := []byte(sumA + "  some-other.tar.gz\n")
 	_, err := lookupChecksum(file, "k9s_Linux_amd64.tar.gz")
 	if err == nil {
 		t.Fatal("expected not found")
@@ -99,13 +108,35 @@ func TestLookupChecksumNotFound(t *testing.T) {
 }
 
 func TestLookupChecksumIgnoresBlanksAndComments(t *testing.T) {
-	file := []byte("\n# header\n  \nabc  k9s_Linux_amd64.tar.gz\n")
+	file := []byte("\n# header\n  \n" + sumA + "  k9s_Linux_amd64.tar.gz\n")
 	got, err := lookupChecksum(file, "k9s_Linux_amd64.tar.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "abc" {
-		t.Fatalf("got %q want abc", got)
+	if got != sumA {
+		t.Fatalf("got %q want %q", got, sumA)
+	}
+}
+
+func TestLookupChecksumMalformedTooShort(t *testing.T) {
+	file := []byte("deadbeef  k9s_Linux_amd64.tar.gz\n")
+	_, err := lookupChecksum(file, "k9s_Linux_amd64.tar.gz")
+	if err == nil {
+		t.Fatal("expected malformed checksum file error")
+	}
+	if !strings.Contains(err.Error(), "malformed checksum file") {
+		t.Fatalf("expected malformed checksum file error, got: %v", err)
+	}
+}
+
+func TestLookupChecksumMalformedNonHex(t *testing.T) {
+	file := []byte(strings.Repeat("z", 64) + "  k9s_Linux_amd64.tar.gz\n")
+	_, err := lookupChecksum(file, "k9s_Linux_amd64.tar.gz")
+	if err == nil {
+		t.Fatal("expected malformed checksum file error")
+	}
+	if !strings.Contains(err.Error(), "malformed checksum file") {
+		t.Fatalf("expected malformed checksum file error, got: %v", err)
 	}
 }
 

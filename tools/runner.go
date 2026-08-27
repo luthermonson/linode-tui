@@ -78,7 +78,12 @@ func (r *Runner) RunWithEnv(ctx context.Context, kind Kind, vars any, extraEnv [
 		prepare(c)
 		return tea.ExecProcess(c, func(err error) tea.Msg { return ExitMsg{Kind: kind, Err: err} }), nil
 	case config.ModeGUI:
-		c := exec.CommandContext(ctx, bin, args...)
+		// Deliberately exec.Command, not exec.CommandContext: this process is
+		// launched detached from the TUI (its own window/session), so it must
+		// keep running after we return — and critically, after the TUI's ctx
+		// is canceled on quit. CommandContext would kill it the moment the
+		// user quits linode-tui, which defeats the point of "detached".
+		c := exec.Command(bin, args...)
 		prepare(c)
 		if err := c.Start(); err != nil {
 			return nil, fmt.Errorf("launch %s: %w", bin, err)

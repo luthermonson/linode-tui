@@ -24,8 +24,9 @@ type FanoutDomain struct {
 
 func newFanoutDomains(d Deps) View {
 	return newListView(listOpts[FanoutDomain]{
-		Deps:  d,
-		Title: "Domains (all accounts)",
+		Deps:    d,
+		Title:   "Domains (all accounts)",
+		Refresh: fanoutDefaultRefresh,
 		Columns: []table.Column{
 			{Title: "ACCOUNT", Width: 12},
 			{Title: "ID", Width: 10},
