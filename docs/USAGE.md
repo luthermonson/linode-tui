@@ -302,15 +302,17 @@ Every mutating action — create, delete, configure, layout edit, bookmark move,
 - Rotates at 2 MiB (`.log` → `.log.1`, single generation kept)
 - Auto-prunes entries older than `audit_retention_days` on launch (default 90, set to 0 to keep forever)
 - Surfaces a one-line "recent: …" banner at startup with the last 3 entries colored by age/status
-- Powers `ctrl+y` (replay-last), `:undo`, `:replay-from <date>`, and the watchlist drift markers
+- Powers `ctrl+y` (replay-last), `:undo`, `:replay-from <date>`, and the watchlist drift markers. `:replay-last` and `:replay-from` are aliases into the `:undo` flow — dry-run by default, `execute` to run the inverse
 
 Useful gestures (in the TUI):
 
 ```
 :audit grep <substring> --err          # what failed recently
 :audit grep <substring> account=prod   # what touched prod
+:replay-last                           # inspect the most recent entry (same as ctrl+y)
 :replay-last execute                   # auto-undo last create
-:replay-from 2026-04-01 execute
+:replay-from 2026-04-01                # inspect the oldest entry on/after that date
+:replay-from 2026-04-01 execute        # …and run its inverse
 ```
 
 ---

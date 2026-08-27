@@ -26,8 +26,9 @@ type FanoutInstance struct {
 
 func newFanoutInstances(d Deps) View {
 	return newListView(listOpts[FanoutInstance]{
-		Deps:  d,
-		Title: "Linodes (all accounts)",
+		Deps:    d,
+		Title:   "Linodes (all accounts)",
+		Refresh: fanoutDefaultRefresh,
 		Columns: []table.Column{
 			{Title: "ACCOUNT", Width: 12},
 			{Title: "ID", Width: 10},

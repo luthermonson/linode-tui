@@ -158,8 +158,13 @@ func TestClearAccountExecuteMutates(t *testing.T) {
 	err := linode.ClearAccount(context.Background(), client, linode.ClearOptions{
 		Account: "dev", Execute: true,
 	}, &buf)
-	if err != nil {
-		t.Fatalf("execute should not error: %v", err)
+	// The fixture has one non-empty bucket, which can't be deleted — the run
+	// must report partial completion rather than a bare "done".
+	if err == nil {
+		t.Fatal("expected a partial-completion error for the skipped bucket")
+	}
+	if !strings.Contains(err.Error(), "bucket full") {
+		t.Errorf("error should name the skipped bucket, got: %v", err)
 	}
 	if deletes.Load() == 0 {
 		t.Fatal("expected at least one mutation")
@@ -167,6 +172,9 @@ func TestClearAccountExecuteMutates(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "EXECUTING") {
 		t.Errorf("expected EXECUTING in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "done (partial)") {
+		t.Errorf("expected a partial-completion line, got:\n%s", out)
 	}
 }
 

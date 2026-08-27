@@ -37,28 +37,33 @@ func (m model) dispatchClearAccount(args []string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = fmt.Sprintf("clear-account: dry-run on %q…", account)
-		return m, clearAccountCmd(m.client, account, false)
+		return m, clearAccountCmd(m.client, account, m.username, false)
 	}
+	// The API-resolved /profile username is the real identity of the token;
+	// the config label is only what this machine happens to call it. Confirm
+	// against the username whenever it's known, and pass it down so
+	// ClearAccount re-checks it against /profile before deleting anything.
 	match := m.username
 	if match == "" {
 		match = account
 	}
 	m.typedConfirm = newTypedConfirmModal(
-		fmt.Sprintf("Delete EVERY resource on account %q? This cannot be undone.", account),
+		fmt.Sprintf("Delete EVERY resource on account %q (user %q)? This cannot be undone.", account, match),
 		match,
-		clearAccountCmd(m.client, account, true),
+		clearAccountCmd(m.client, account, m.username, true),
 	)
 	return m, m.typedConfirm.Init()
 }
 
-func clearAccountCmd(client *linode.Client, account string, execute bool) tea.Cmd {
+func clearAccountCmd(client *linode.Client, account, username string, execute bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 		defer cancel()
 		var buf bytes.Buffer
 		err := linode.ClearAccount(ctx, client, linode.ClearOptions{
-			Account: account,
-			Execute: execute,
+			Account:          account,
+			Execute:          execute,
+			ExpectedUsername: username,
 		}, &buf)
 		return clearAccountDoneMsg{account: account, dry: !execute, output: buf.String(), err: err}
 	}
