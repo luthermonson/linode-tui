@@ -88,12 +88,12 @@ func RunFull(ctx context.Context, cfg *config.Config, client *linode.Client, ini
 }
 
 type model struct {
-	startedAt   time.Time
-	cfg         *config.Config
-	client      *linode.Client
-	theme       theme.Theme
-	keys        keys.Map
-	cmd         cmdbar.Model
+	startedAt     time.Time
+	cfg           *config.Config
+	client        *linode.Client
+	theme         theme.Theme
+	keys          keys.Map
+	cmd           cmdbar.Model
 	current       views.View
 	currentName   string
 	secondary     views.View
@@ -105,27 +105,32 @@ type model struct {
 	splitRatio    float64 // 0.5 = even; adjustable with +/- in split mode
 	previewFollow bool    // true: re-fetch the focused row each tick
 	previewKind   string  // primary view name at split-preview time
-	quatRatio     float64 // share of total height the quaternary pane gets
-	readOnly      bool    // session-scoped: blocks mutating dispatches
-	mouseOn       bool    // mouse reporting on (wheel scroll; blocks native text selection)
-	stack         []viewFrame
-	w, h          int
-	status      string
-	statusLog   []string
-	stats       map[string]int
+	// previewGen tags the follow chain. Every :split-preview (and anything
+	// that replaces the secondary pane) bumps it; ticks and fetch results
+	// carrying an older generation are dropped, so two `:split-preview follow`
+	// invocations can't leave two chains racing on the same pane.
+	previewGen int
+	quatRatio  float64 // share of total height the quaternary pane gets
+	readOnly   bool    // session-scoped: blocks mutating dispatches
+	mouseOn    bool    // mouse reporting on (wheel scroll; blocks native text selection)
+	stack      []viewFrame
+	w, h       int
+	status     string
+	statusLog  []string
+	stats      map[string]int
 
 	installing   tools.Kind
 	pendingDrill *views.DrillInMsg
 	prompt       *installPrompt
 	confirm      *confirmModal
 	typedConfirm *typedConfirmModal
-	helpOpen   bool
-	helpFilter string
-	form       subform
-	detail     *detailModal
-	installCh  chan tea.Msg
-	spinner    spinner.Model
-	helpBar    help.Model
+	helpOpen     bool
+	helpFilter   string
+	form         subform
+	detail       *detailModal
+	installCh    chan tea.Msg
+	spinner      spinner.Model
+	helpBar      help.Model
 	// username is the API-resolved /profile username, cached at startup so
 	// the header reads "@<username>" instead of "@__cli__" when the token
 	// came from LINODE_TOKEN (no named account).
@@ -164,26 +169,24 @@ func newModel(cfg *config.Config, client *linode.Client) model {
 	if stats == nil {
 		stats = map[string]int{}
 	}
-	// Drop snapshot files that no longer correspond to any bookmark.
-	views.PruneSnapshots(cfg.Bookmarks)
+	// Drop snapshot files that no longer correspond to any bookmark. This has
+	// to use the *active* scope: after `:bookmark scope account` (or
+	// `:bookmark migrate`) the global map is empty, and pruning against it
+	// would delete every snapshot on the next launch.
+	views.PruneSnapshots(cfg.ActiveBookmarks())
 
-	// Apply audit retention (default 90 days when unset).
+	// Apply audit retention. 0 means "keep forever" — the documented
+	// behaviour in docs/USAGE.md and on the config field. config.Default()
+	// seeds 90, so a config file with no audit_retention_days key still
+	// prunes; an explicit `audit_retention_days: 0` disables pruning.
 	retentionDays := cfg.AuditRetentionDays
-	retentionDefault := false
-	if retentionDays == 0 {
-		retentionDays = 90
-		retentionDefault = true
-	}
 	pruneNotice := ""
 	prunedCount := 0
 	if retentionDays > 0 {
 		cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
 		if removed := audit.PruneOlderThan(cutoff); removed > 0 {
 			prunedCount = removed
-			pruneNotice = fmt.Sprintf("pruned %d audit entries older than %dd", removed, retentionDays)
-			if retentionDefault {
-				pruneNotice += " (set audit_retention_days in config to override the 90d default)"
-			}
+			pruneNotice = fmt.Sprintf("pruned %d audit entries older than %dd (audit_retention_days: 0 keeps them forever)", removed, retentionDays)
 		}
 	}
 
@@ -329,7 +332,6 @@ func activeTheme(cfg *config.Config) string {
 	return cfg.ActiveTheme
 }
 
-
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.cmd.Init(), m.spinner.Tick, m.resolveProfileCmd()}
 	// Init every live pane, not just the primary: panes restored from
@@ -389,7 +391,7 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prompt.Done() {
 			return m.finishPrompt()
 		}
-		return m, cmd
+		return m.withBackground(msg, cmd)
 	}
 	if m.confirm != nil {
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
@@ -399,7 +401,7 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.confirm.Done() {
 			return m.finishConfirm()
 		}
-		return m, cmd
+		return m.withBackground(msg, cmd)
 	}
 	if m.typedConfirm != nil {
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
@@ -415,7 +417,7 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "cancelled"
 			return m, nil
 		}
-		return m, cmd
+		return m.withBackground(msg, cmd)
 	}
 	if m.form != nil {
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
@@ -425,7 +427,7 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.form.Done() {
 			return m.finishForm()
 		}
-		return m, cmd
+		return m.withBackground(msg, cmd)
 	}
 	if m.detail != nil {
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
@@ -438,7 +440,7 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, editCmd
 			}
 		}
-		return m, cmd
+		return m.withBackground(msg, cmd)
 	}
 
 	switch msg := msg.(type) {
@@ -510,13 +512,42 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmd.SetTheme(t)
 		}
 		m.status = "switched to account: " + msg.Name
-		if m.currentName != "" {
-			if f, ok := views.Resolve(m.currentName); ok {
-				m.current = f(m.deps())
-				return m, m.current.Init()
-			}
+		// Every pane — not just the primary — captured the previous account's
+		// *linode.Client at construction time, so all four slots have to be
+		// rebuilt or the background panes keep polling the old account with
+		// the old token.
+		//
+		// The drill-in stack is dropped for the same reason: its frames hold
+		// views built against the old client, and they can't be rebuilt
+		// faithfully (the parent ids they were constructed with aren't
+		// retained). Landing on a clean top-level view beats letting ctrl+b
+		// resurrect a pane pointed at the wrong account.
+		m.stack = nil
+		next, cmd := m.rebuildPanes()
+		return next, cmd
+
+	case views.ActionDoneMsg:
+		// Deliberately no `return`: the status line is only half the story —
+		// listView reacts to the same message by re-fetching, so it has to
+		// keep flowing through to the pane fan-out below.
+		label := msg.Label
+		if label == "" {
+			label = "action"
 		}
-		return m, nil
+		m.status = "✓ " + label + " done"
+
+	case views.ActionErrorMsg:
+		// Same as above: falls through to the panes, which surface the error
+		// in their own error pane.
+		label := msg.Label
+		if label == "" {
+			label = "action"
+		}
+		if msg.Err != nil {
+			m.status = "✗ " + label + " failed: " + msg.Err.Error()
+		} else {
+			m.status = "✗ " + label + " failed"
+		}
 
 	case views.ConfirmMsg:
 		if m.readOnly {
@@ -568,7 +599,9 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case bookmarkClearedMsg:
-		delete(m.cfg.Bookmarks, msg.kind)
+		// Clear from whichever scope is live (per-account or global) so this
+		// matches `:bookmark list`/`mv` and the star key in listView.
+		m.cfg.SetBookmarks(msg.kind, nil)
 		_ = m.cfg.Save()
 		m.status = fmt.Sprintf("bookmark clear: removed %d under %s", msg.count, msg.kind)
 		return m, nil
@@ -591,27 +624,63 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case previewRefreshMsg:
-		if m.secondary == nil || !m.previewFollow {
+		// A tick from a superseded follow chain (a second `:split-preview
+		// follow`, a `:split`, a layout load) is dropped here so only one
+		// chain stays alive.
+		if msg.gen != m.previewGen || m.secondary == nil || !m.previewFollow {
 			return m, nil
 		}
 		ident, ok := m.current.(views.Identifiable)
 		if !ok {
-			return m, m.previewTick()
+			return m, m.previewTick(msg.gen)
 		}
 		id := ident.SelectedID()
 		if id == "" {
-			return m, m.previewTick()
+			return m, m.previewTick(msg.gen)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		body, err := resourceJSON(ctx, m.client, m.previewKind, id)
-		cancel()
-		if err == nil {
-			if tv, ok := m.secondary.(*views.TextView); ok {
-				tv.TitleText = previewTitle(m.previewKind, id, body)
-				tv.Body = body
+		// The fetch runs in a tea.Cmd — doing it inline blocks Update (and so
+		// the whole UI) for up to the request timeout.
+		return m, previewFetchCmd(m.client, msg.gen, m.previewKind, id)
+
+	case previewLoadedMsg:
+		if msg.gen != m.previewGen {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.status = "preview: " + msg.err.Error()
+			if m.previewFollow {
+				return m, m.previewTick(msg.gen)
 			}
+			return m, nil
 		}
-		return m, m.previewTick()
+		title := previewTitle(msg.kind, msg.id, msg.body)
+		var cmds []tea.Cmd
+		if tv, ok := m.secondary.(*views.TextView); ok && m.secondaryName == "preview" {
+			tv.TitleText = title
+			tv.Body = msg.body
+		} else {
+			m.secondary = views.NewTextView(title, msg.body)
+			m.secondaryName = "preview"
+			next, cmd := m.initPanes(m.secondary.Init())
+			m = next
+			cmds = append(cmds, cmd)
+		}
+		if m.status == "loading preview…" {
+			m.status = ""
+		}
+		if m.previewFollow {
+			cmds = append(cmds, m.previewTick(msg.gen))
+		}
+		return m, tea.Batch(cmds...)
+
+	case resourceOpenedMsg:
+		if msg.err != nil {
+			m.status = "open: " + msg.err.Error()
+			return m, nil
+		}
+		m.status = ""
+		m.detail = newDetailModal(msg.title, msg.body, m.theme, m.w, m.h, nil)
+		return m, m.detail.Init()
 
 	case views.OpenDetailMsg:
 		m.detail = newDetailModal(msg.Title, msg.Body, m.theme, m.w, m.h, msg.OnEdit)
@@ -639,7 +708,8 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		deps.Context = msg.Context
 		m.current = f(deps)
 		m.currentName = msg.Name
-		return m, m.current.Init()
+		next, cmd := m.initPanes(m.current.Init())
+		return next, cmd
 
 	case views.ConfigureLinodeMsg:
 		if m.readOnly {
@@ -666,14 +736,54 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmd = c
 			return m, cmd
 		}
-		switch {
-		case key(msg, m.keys.Quit):
+		if key(msg, m.keys.Quit) {
 			return m, tea.Quit
+		}
+		// The help overlay is modal: it owns every key while it's up, so its
+		// promised "? or esc to close" isn't intercepted by the drill-in stack
+		// pop below, and printable keys land in its filter instead of firing
+		// global bindings.
+		if m.helpOpen {
+			switch s := msg.String(); s {
+			case "esc":
+				if m.helpFilter != "" {
+					m.helpFilter = ""
+				} else {
+					m.helpOpen = false
+				}
+				return m, nil
+			case "?":
+				m.helpOpen = false
+				m.helpFilter = ""
+				return m, nil
+			case "backspace":
+				if n := len(m.helpFilter); n > 0 {
+					m.helpFilter = m.helpFilter[:n-1]
+				}
+				return m, nil
+			default:
+				if len(s) == 1 {
+					m.helpFilter += s
+				}
+				return m, nil
+			}
+		}
+		// While the focused view has its filter input open, every printable
+		// key (and the pane gestures) belongs to that input — otherwise `:`
+		// and `?` are unreachable and field filters like `region:us-east`
+		// can't be typed at all.
+		filtering := false
+		if f, ok := m.current.(views.Filterable); ok {
+			filtering = f.Filtering()
+		}
+		switch {
+		case filtering:
+			// fall through to the view
 		case key(msg, m.keys.CmdBar):
 			m.cmd.Open()
 			return m, m.cmd.Init()
 		case key(msg, m.keys.Help):
-			m.helpOpen = !m.helpOpen
+			m.helpOpen = true
 			m.helpFilter = ""
 			return m, nil
 		case key(msg, m.keys.Back):
@@ -688,18 +798,16 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// esc pops the drill-in stack unless the current view wants
 			// to consume esc itself (e.g., clearing a filter).
 			if len(m.stack) > 0 {
-				if f, ok := m.current.(views.Filterable); !ok || !f.Filtering() {
-					top := m.stack[len(m.stack)-1]
-					m.stack = m.stack[:len(m.stack)-1]
-					m.current = top.view
-					m.currentName = top.name
-					return m, nil
-				}
+				top := m.stack[len(m.stack)-1]
+				m.stack = m.stack[:len(m.stack)-1]
+				m.current = top.view
+				m.currentName = top.name
+				return m, nil
 			}
 		case key(msg, m.keys.Replay):
-			return m.dispatch(":undo")
+			return m.dispatch("undo")
 		}
-		if msg.String() == "tab" && m.secondary != nil {
+		if !filtering && msg.String() == "tab" && m.secondary != nil {
 			// Cycle focus across all live panes. Rotate by one step so the
 			// focused (primary) slot becomes the next pane in order.
 			panes := []*views.View{&m.current, &m.secondary, &m.tertiary, &m.quaternary}
@@ -726,7 +834,9 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.cfg.Save()
 			return m, nil
 		}
-		if m.secondary != nil {
+		// `-`, `+`, `[` and `]` are ordinary filter characters, so the pane
+		// resize gestures also stand down while a filter is being typed.
+		if !filtering && m.secondary != nil {
 			switch msg.String() {
 			case "+", "=":
 				m.splitRatio = clampRatio(m.splitRatio + 0.05)
@@ -748,55 +858,53 @@ func (m model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		if m.helpOpen {
-			switch s := msg.String(); s {
-			case "esc":
-				if m.helpFilter != "" {
-					m.helpFilter = ""
-				} else {
-					m.helpOpen = false
-				}
-				return m, nil
-			case "backspace":
-				if n := len(m.helpFilter); n > 0 {
-					m.helpFilter = m.helpFilter[:n-1]
-				}
-				return m, nil
-			default:
-				if len(s) == 1 {
-					m.helpFilter += s
-				}
-				return m, nil
-			}
-		}
 	}
 
-	var cmds []tea.Cmd
-	if m.current != nil {
+	// Key input only goes to the primary pane; everything else (ticks, loaded
+	// msgs, action results) fans out to every live pane so their refresh loops
+	// keep ticking.
+	if _, isKey := msg.(tea.KeyMsg); isKey {
+		if m.current == nil {
+			return m, nil
+		}
 		next, cmd := m.current.Update(msg)
 		m.current = asView(next, m.current)
+		return m, cmd
+	}
+	next, cmd := m.forwardBackground(msg)
+	return next, cmd
+}
+
+// forwardBackground sends one non-key message to every live pane. Split out of
+// updateInner so the modal branches can call it too: a listTickMsg swallowed
+// while a modal is open breaks that pane's tick→fetch→loaded→tick chain for
+// the rest of the session, and the pane silently stops refreshing.
+func (m model) forwardBackground(msg tea.Msg) (model, tea.Cmd) {
+	var cmds []tea.Cmd
+	for _, pane := range []*views.View{&m.current, &m.secondary, &m.tertiary, &m.quaternary} {
+		if *pane == nil {
+			continue
+		}
+		next, cmd := (*pane).Update(msg)
+		*pane = asView(next, *pane)
 		cmds = append(cmds, cmd)
 	}
-	// Forward non-key messages (ticks, loaded msgs) to the inactive panes so
-	// their refresh loops keep ticking. Key input only goes to the primary.
-	if _, isKey := msg.(tea.KeyMsg); !isKey {
-		if m.secondary != nil {
-			next, cmd := m.secondary.Update(msg)
-			m.secondary = asView(next, m.secondary)
-			cmds = append(cmds, cmd)
-		}
-		if m.tertiary != nil {
-			next, cmd := m.tertiary.Update(msg)
-			m.tertiary = asView(next, m.tertiary)
-			cmds = append(cmds, cmd)
-		}
-		if m.quaternary != nil {
-			next, cmd := m.quaternary.Update(msg)
-			m.quaternary = asView(next, m.quaternary)
-			cmds = append(cmds, cmd)
-		}
-	}
 	return m, tea.Batch(cmds...)
+}
+
+// withBackground pairs a modal's own command with the background fan-out.
+// Keys belong to the modal alone; a resize re-derives every pane's geometry
+// through broadcastSize rather than handing panes the raw full-screen size.
+func (m model) withBackground(msg tea.Msg, cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tea.KeyMsg:
+		return m, cmd
+	case tea.WindowSizeMsg:
+		next, sizeCmd := m.broadcastSize()
+		return next, tea.Batch(cmd, sizeCmd)
+	}
+	next, bg := m.forwardBackground(msg)
+	return next, tea.Batch(cmd, bg)
 }
 
 func (m model) View() string {
@@ -906,7 +1014,74 @@ func (m model) broadcastSize() (model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-type previewRefreshMsg struct{}
+// initPanes batches pane Init commands with a fresh size broadcast. A freshly
+// constructed view sits at its default (10-row) viewport until it receives a
+// WindowSizeMsg, so every site that swaps a view into a pane slot has to
+// re-broadcast — otherwise the new pane renders tiny until the user resizes
+// the terminal. Skipped before the first real WindowSizeMsg arrives, when
+// m.w/m.h are still zero and the derived sizes would be nonsense.
+func (m model) initPanes(cmds ...tea.Cmd) (model, tea.Cmd) {
+	if m.w > 0 && m.h > 0 {
+		next, sizeCmd := m.broadcastSize()
+		m = next
+		cmds = append(cmds, sizeCmd)
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// rebuildPanes re-instantiates every live pane from its registered name using
+// the current deps, then re-inits and re-sizes them. Used whenever the deps
+// themselves change underneath the panes — account switch (new *linode.Client),
+// `:theme` (new palette), `:reload` (new *config.Config). Without it, panes
+// other than the primary keep polling with the previous account's token.
+//
+// A pane whose name doesn't resolve (e.g. the synthetic "preview" pane) is
+// left in place rather than dropped.
+func (m model) rebuildPanes() (model, tea.Cmd) {
+	var cmds []tea.Cmd
+	slots := []struct {
+		view *views.View
+		name string
+	}{
+		{&m.current, m.currentName},
+		{&m.secondary, m.secondaryName},
+		{&m.tertiary, m.tertiaryName},
+		{&m.quaternary, m.quatName},
+	}
+	for _, s := range slots {
+		if *s.view == nil || s.name == "" {
+			continue
+		}
+		f, ok := views.Resolve(s.name)
+		if !ok {
+			continue
+		}
+		*s.view = f(m.deps())
+		cmds = append(cmds, (*s.view).Init())
+	}
+	return m.initPanes(cmds...)
+}
+
+// previewRefreshMsg is one tick of the :split-preview follow chain. gen is the
+// previewGen the chain was started with; a mismatch means this chain has been
+// superseded and the message is dropped.
+type previewRefreshMsg struct{ gen int }
+
+// previewLoadedMsg carries the result of an off-thread preview fetch.
+type previewLoadedMsg struct {
+	gen  int
+	kind string
+	id   string
+	body string
+	err  error
+}
+
+// resourceOpenedMsg carries the result of an off-thread `:open` fetch.
+type resourceOpenedMsg struct {
+	title string
+	body  string
+	err   error
+}
 
 type auditClearedMsg struct{ removed int }
 
@@ -932,14 +1107,36 @@ func previewTitle(kind, id, body string) string {
 	return t
 }
 
-// previewTick schedules the next follow refresh. Uses the cfg refresh
-// interval (2s by default) so it matches the listView cadence.
-func (m model) previewTick() tea.Cmd {
+// previewTick schedules the next follow refresh for generation gen. Uses the
+// cfg refresh interval (2s by default) so it matches the listView cadence.
+func (m model) previewTick(gen int) tea.Cmd {
 	d := m.cfg.Refresh
 	if d <= 0 {
 		d = 2 * time.Second
 	}
-	return tea.Tick(d, func(time.Time) tea.Msg { return previewRefreshMsg{} })
+	return tea.Tick(d, func(time.Time) tea.Msg { return previewRefreshMsg{gen: gen} })
+}
+
+// previewFetchCmd pulls one resource's JSON off the UI thread. Calling
+// resourceJSON inline from Update freezes the whole program (input, spinner,
+// every pane's refresh) until the request finishes or times out.
+func previewFetchCmd(c *linode.Client, gen int, kind, id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		body, err := resourceJSON(ctx, c, kind, id)
+		return previewLoadedMsg{gen: gen, kind: kind, id: id, body: body, err: err}
+	}
+}
+
+// resourceOpenCmd is previewFetchCmd's sibling for `:open`.
+func resourceOpenCmd(c *linode.Client, title, resource, id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		body, err := resourceJSON(ctx, c, resource, id)
+		return resourceOpenedMsg{title: title, body: body, err: err}
+	}
 }
 
 func (m model) dispatchLayout(args []string) (tea.Model, tea.Cmd) {
@@ -1341,6 +1538,10 @@ func (m model) applyLayout(l config.NamedLayout) (tea.Model, tea.Cmd) {
 	m.secondary, m.secondaryName = nil, ""
 	m.tertiary, m.tertiaryName = nil, ""
 	m.quaternary, m.quatName = nil, ""
+	// The secondary pane is being replaced, so any :split-preview follow chain
+	// aimed at it is now orphaned — retire its generation.
+	m.previewFollow, m.previewKind = false, ""
+	m.previewGen++
 	if l.Secondary != "" {
 		if f, ok := views.Resolve(l.Secondary); ok {
 			m.secondary = f(m.deps())
@@ -1438,6 +1639,9 @@ func refreshDefaults() map[string]time.Duration { return config.RefreshDefaults(
 // names). Kept separate from views.Names() so the registry stays the single
 // source of truth for views.
 func cmdbarVerbs() []string {
+	// Every entry here must have a matching case in dispatch — see
+	// TestAllCmdbarVerbsDispatch, which fails the build if a verb is
+	// completable but unroutable (or routable but not completable).
 	return []string{
 		"account",
 		"audit",
@@ -1445,21 +1649,28 @@ func cmdbarVerbs() []string {
 		"cache",
 		"clear-account",
 		"config",
+		"configure",
 		"diff",
 		"doctor",
 		"export",
+		"fanout",
 		"fold-char",
 		"layout",
+		"log",
 		"mouse",
 		"new",
 		"open",
 		"pane",
 		"read-only",
 		"refresh",
+		"reload",
 		"replay-from",
 		"replay-last",
+		"snapshots",
 		"split",
+		"split-down",
 		"split-preview",
+		"split-right",
 		"stats",
 		"theme",
 		"tools",
@@ -1512,7 +1723,6 @@ func renderBar(value, max int64, width int) string {
 	}
 	return strings.Repeat("█", filled) + strings.Repeat("·", width-filled)
 }
-
 
 func (m model) tertiaryFolded() bool {
 	bp := m.cfg.FoldWidthTertiary
@@ -1675,6 +1885,10 @@ func (m model) foldHints() string {
 }
 
 func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
+	// The command bar strips the leading `:` before submitting, but internal
+	// callers (and anything copy-pasted out of the docs) naturally write the
+	// command the way the user types it. Accept both.
+	input = strings.TrimPrefix(strings.TrimSpace(input), ":")
 	if input == "" {
 		return m, nil
 	}
@@ -1731,13 +1945,17 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 						swatch(t.Warn, "Warn"),
 						swatch(t.Error, "Err"),
 					)
-					if n == m.cfg.ActiveTheme {
+					// Mark what's actually rendering, which is the active
+					// account's override when it has one — not the global
+					// default it shadows.
+					if n == activeTheme(m.cfg) {
 						line += "  ← active"
 					}
 					b.WriteString(line + "\n")
 				}
 			}
-			fmt.Fprintf(&b, "\nactive (global): %s\n", m.cfg.ActiveTheme)
+			fmt.Fprintf(&b, "\nactive (effective): %s\n", activeTheme(m.cfg))
+			fmt.Fprintf(&b, "active (global): %s\n", m.cfg.ActiveTheme)
 			if len(m.cfg.Accounts) > 0 {
 				b.WriteString("\nper-account overrides:\n")
 				names := make([]string, 0, len(m.cfg.Accounts))
@@ -1789,18 +2007,38 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 				if t, ok := theme.ByName(themeName); ok {
 					m.theme = t
 					m.cmd.SetTheme(t)
+					return m.rebuildPanes()
 				}
 			}
 			return m, nil
 		}
-		if t, ok := theme.ByName(parts[1]); ok {
-			m.theme = t
-			m.cfg.ActiveTheme = t.Name
-			m.cmd.SetTheme(t)
-		} else {
+		t, ok := theme.ByName(parts[1])
+		if !ok {
 			m.status = "unknown theme: " + parts[1]
+			return m, nil
 		}
-		return m, nil
+		m.theme = t
+		m.cmd.SetTheme(t)
+		// Writing the global default while the active account pins its own
+		// theme would half-apply the change: the header and cmdbar recolor,
+		// but activeTheme() keeps preferring the override, so the next rebuild
+		// (or the next launch) snaps back. Retarget the override instead.
+		scope := "global"
+		if acct, ok := m.cfg.Accounts[m.cfg.DefaultAccount]; ok && acct.Theme != "" {
+			acct.Theme = t.Name
+			m.cfg.Accounts[m.cfg.DefaultAccount] = acct
+			scope = "account " + m.cfg.DefaultAccount + " (overrides global " + m.cfg.ActiveTheme + ")"
+		} else {
+			m.cfg.ActiveTheme = t.Name
+		}
+		if err := m.cfg.Save(); err != nil {
+			m.status = "theme = " + t.Name + " (not saved: " + err.Error() + ")"
+			return m.rebuildPanes()
+		}
+		m.status = "theme = " + t.Name + " · " + scope
+		// Panes captured the old palette in their Deps at construction time,
+		// so the whole screen only recolors once they're rebuilt.
+		return m.rebuildPanes()
 
 	case "refresh":
 		// `:refresh` — show current settings.
@@ -1967,27 +2205,10 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 			m.theme = t
 			m.cmd.SetTheme(t)
 		}
-		var cmds []tea.Cmd
-		if m.currentName != "" {
-			if f, ok := views.Resolve(m.currentName); ok {
-				m.current = f(m.deps())
-				cmds = append(cmds, m.current.Init())
-			}
-		}
-		if m.secondaryName != "" {
-			if f, ok := views.Resolve(m.secondaryName); ok {
-				m.secondary = f(m.deps())
-				cmds = append(cmds, m.secondary.Init())
-			}
-		}
-		if m.tertiaryName != "" {
-			if f, ok := views.Resolve(m.tertiaryName); ok {
-				m.tertiary = f(m.deps())
-				cmds = append(cmds, m.tertiary.Init())
-			}
-		}
 		m.status = "reloaded " + m.cfg.Path()
-		return m, tea.Batch(cmds...)
+		// Rebuilds all four slots (the quaternary pane used to be skipped and
+		// kept running against the previous *config.Config) and re-sizes them.
+		return m.rebuildPanes()
 
 	case "fanout", "fan":
 		sub := "instances"
@@ -2023,7 +2244,7 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		}
 		m.current = f(deps)
 		m.currentName = target
-		return m, m.current.Init()
+		return m.initPanes(m.current.Init())
 
 	case "log":
 		body := strings.Join(m.statusLog, "\n")
@@ -2099,6 +2320,45 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		}
 		m.detail = newDetailModal(title, b.String(), m.theme, m.w, m.h, nil)
 		return m, m.detail.Init()
+
+	case "replay-last":
+		// The name the docs, the help overlay and ctrl+y all use for "inspect
+		// (or execute) the inverse of an audit entry" — i.e. `:undo`. Same
+		// arguments: `[step N] [execute]`.
+		return m.dispatch(strings.Join(append([]string{"undo"}, parts[1:]...), " "))
+
+	case "replay-from":
+		// `:replay-from <date> [execute]` — resolve the date to a step index
+		// and hand off to the same flow. The chosen entry is the *oldest* one
+		// at or after the date, so "replay from April 1st" starts where that
+		// day started rather than at whatever happened last.
+		if len(parts) < 2 {
+			m.status = "usage: :replay-from <YYYY-MM-DD|RFC3339> [execute]"
+			return m, nil
+		}
+		from, err := parseAuditDate(parts[1])
+		if err != nil {
+			m.status = "replay-from: " + err.Error()
+			return m, nil
+		}
+		entries := audit.Tail(1000)
+		step := -1
+		// Tail returns newest-first, so the index *is* the step and the last
+		// match walking forward is the oldest qualifying entry.
+		for i, e := range entries {
+			if !e.Timestamp.Before(from) {
+				step = i
+			}
+		}
+		if step < 0 {
+			m.status = "replay-from: no audit entries at or after " + parts[1]
+			return m, nil
+		}
+		args := []string{"undo", "step", strconv.Itoa(step)}
+		if parts[len(parts)-1] == "execute" {
+			args = append(args, "execute")
+		}
+		return m.dispatch(strings.Join(args, " "))
 
 	case "cache":
 		root, err := cache.Root()
@@ -2621,26 +2881,29 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		case "primary", "p":
 			m.current = f(m.deps())
 			m.currentName = viewName
-			cmd := m.current.Init()
-			return m, cmd
+			return m.initPanes(m.current.Init())
 		case "secondary", "s":
 			m.secondary = f(m.deps())
 			m.secondaryName = viewName
+			// Replacing the secondary pane orphans any split-preview follow
+			// chain aimed at it.
+			m.previewFollow, m.previewKind = false, ""
+			m.previewGen++
 			m.cfg.LastSplit.View = viewName
 			_ = m.cfg.Save()
-			return m, m.secondary.Init()
+			return m.initPanes(m.secondary.Init())
 		case "tertiary", "t":
 			m.tertiary = f(m.deps())
 			m.tertiaryName = viewName
 			m.cfg.LastSplit.Right = viewName
 			_ = m.cfg.Save()
-			return m, m.tertiary.Init()
+			return m.initPanes(m.tertiary.Init())
 		case "quaternary", "q":
 			m.quaternary = f(m.deps())
 			m.quatName = viewName
 			m.cfg.LastSplit.Down = viewName
 			_ = m.cfg.Save()
-			return m, m.quaternary.Init()
+			return m.initPanes(m.quaternary.Init())
 		default:
 			m.status = "unknown slot: " + slot
 			return m, nil
@@ -2659,13 +2922,18 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		}
 		m.secondary = f(m.deps())
 		m.secondaryName = name
+		// The pane a split-preview follow chain was writing into is gone;
+		// retire the chain so it doesn't keep overwriting the new pane's
+		// slot (or run forever alongside a second chain).
+		m.previewFollow, m.previewKind = false, ""
+		m.previewGen++
 		// Load per-pair ratio if remembered; otherwise keep current.
 		if r, ok := m.cfg.SplitRatios[splitPairKey(m.currentName, name)]; ok {
 			m.splitRatio = clampRatio(r)
 		}
 		m.cfg.LastSplit = config.SplitState{View: name, Ratio: m.splitRatio}
 		_ = m.cfg.Save()
-		return m, m.secondary.Init()
+		return m.initPanes(m.secondary.Init())
 
 	case "unsplit":
 		m.secondary = nil
@@ -2676,6 +2944,7 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		m.quatName = ""
 		m.previewFollow = false
 		m.previewKind = ""
+		m.previewGen++
 		m.cfg.LastSplit = config.SplitState{}
 		_ = m.cfg.Save()
 		return m, nil
@@ -2691,23 +2960,15 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 			m.status = "no row focused"
 			return m, nil
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		body, err := resourceJSON(ctx, m.client, m.currentName, id)
-		cancel()
-		if err != nil {
-			m.status = "preview: " + err.Error()
-			return m, nil
-		}
-		m.secondary = views.NewTextView(previewTitle(m.currentName, id, body), body)
-		m.secondaryName = "preview"
+		// Bump first: a second `:split-preview follow` has to invalidate the
+		// chain the first one started, or both keep ticking on the same pane.
+		m.previewGen++
 		m.previewKind = m.currentName
 		m.previewFollow = len(parts) >= 2 && parts[1] == "follow"
-		var cmds []tea.Cmd
-		cmds = append(cmds, m.secondary.Init())
-		if m.previewFollow {
-			cmds = append(cmds, m.previewTick())
-		}
-		return m, tea.Batch(cmds...)
+		m.status = "loading preview…"
+		// Fetched in a tea.Cmd — an inline call blocks every keystroke and
+		// every pane's refresh for up to the 15s timeout.
+		return m, previewFetchCmd(m.client, m.previewGen, m.previewKind, id)
 
 	case "split-right":
 		if m.secondary == nil {
@@ -2728,7 +2989,7 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		m.tertiaryName = name
 		m.cfg.LastSplit.Right = name
 		_ = m.cfg.Save()
-		return m, m.tertiary.Init()
+		return m.initPanes(m.tertiary.Init())
 
 	case "split-down":
 		if m.secondary == nil {
@@ -2749,7 +3010,7 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		m.quatName = name
 		m.cfg.LastSplit.Down = name
 		_ = m.cfg.Save()
-		return m, m.quaternary.Init()
+		return m.initPanes(m.quaternary.Init())
 
 	case "configure":
 		if len(parts) < 3 {
@@ -3002,11 +3263,15 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			kind := parts[2]
-			if _, ok := m.cfg.Bookmarks[kind]; !ok {
+			// Active scope, like list/mv and the star key — under
+			// `:bookmark scope account` the global map is empty and this
+			// would report "no bookmarks" for kinds that plainly have some.
+			active := m.cfg.ActiveBookmarks()
+			if _, ok := active[kind]; !ok {
 				m.status = "bookmark clear: no bookmarks under kind " + kind
 				return m, nil
 			}
-			count := len(m.cfg.Bookmarks[kind])
+			count := len(active[kind])
 			m.typedConfirm = newTypedConfirmModal(
 				fmt.Sprintf("type 'clear %s' to remove %d bookmark(s)", kind, count),
 				"clear "+kind,
@@ -3039,22 +3304,28 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 				m.status = fmt.Sprintf("bookmark import: file version %d > 1", doc.Version)
 				return m, nil
 			}
-			if !merge || m.cfg.Bookmarks == nil {
-				m.cfg.Bookmarks = map[string][]string{}
+			// Import into the active scope so it round-trips with export and
+			// matches what `:bookmark list` shows.
+			if !merge {
+				for kind := range m.cfg.ActiveBookmarks() {
+					m.cfg.SetBookmarks(kind, nil)
+				}
 			}
 			added := 0
 			for kind, ids := range doc.Bookmarks {
+				merged := append([]string(nil), m.cfg.ActiveBookmarks()[kind]...)
 				existing := map[string]bool{}
-				for _, id := range m.cfg.Bookmarks[kind] {
+				for _, id := range merged {
 					existing[id] = true
 				}
 				for _, id := range ids {
 					if !existing[id] {
-						m.cfg.Bookmarks[kind] = append(m.cfg.Bookmarks[kind], id)
+						merged = append(merged, id)
 						existing[id] = true
 						added++
 					}
 				}
+				m.cfg.SetBookmarks(kind, merged)
 			}
 			_ = m.cfg.Save()
 			mode := "replace"
@@ -3069,10 +3340,13 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			path := expandHomePath(parts[2])
+			// Export what's actually in force, not the (possibly empty)
+			// global map.
+			active := m.cfg.ActiveBookmarks()
 			data, err := yaml.Marshal(struct {
 				Version   int                 `yaml:"version"`
 				Bookmarks map[string][]string `yaml:"bookmarks"`
-			}{Version: 1, Bookmarks: m.cfg.Bookmarks})
+			}{Version: 1, Bookmarks: active})
 			if err != nil {
 				m.status = "bookmark export: " + err.Error()
 				return m, nil
@@ -3082,7 +3356,7 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			n := 0
-			for _, ids := range m.cfg.Bookmarks {
+			for _, ids := range active {
 				n += len(ids)
 			}
 			m.status = fmt.Sprintf("exported %d bookmark(s) → %s", n, path)
@@ -3102,19 +3376,14 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		if len(parts) >= 3 {
 			id = parts[2]
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		body, err := resourceJSON(ctx, m.client, resource, id)
-		if err != nil {
-			m.status = "open: " + err.Error()
-			return m, nil
-		}
 		title := resource
 		if id != "" {
 			title = resource + "/" + id
 		}
-		m.detail = newDetailModal(title, body, m.theme, m.w, m.h, nil)
-		return m, m.detail.Init()
+		m.status = "opening " + title + "…"
+		// Off the UI thread: this list-and-scan can take the full 15s timeout
+		// on a large account, and doing it inline freezes the program.
+		return m, resourceOpenCmd(m.client, title, resource, id)
 
 	case "diff":
 		if len(parts) >= 4 && parts[1] == "snapshot" {
@@ -3176,10 +3445,21 @@ func (m model) dispatch(input string) (tea.Model, tea.Cmd) {
 		m.current = f(m.deps())
 		m.currentName = head
 		m.bumpStat("view:" + head)
-		return m, m.current.Init()
+		return m.initPanes(m.current.Init())
 	}
 	m.status = "unknown command: " + head
 	return m, nil
+}
+
+// parseAuditDate accepts the handful of date shapes `:replay-from` is likely
+// to be handed: a bare day, a day+time, or a full RFC3339 stamp.
+func parseAuditDate(s string) (time.Time, error) {
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02 15:04", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("can't parse %q as a date (try 2006-01-02)", s)
 }
 
 func key(msg tea.KeyMsg, b interface{ Keys() []string }) bool {
@@ -3536,7 +3816,12 @@ func (m model) dispatchExport(args []string) (tea.Model, tea.Cmd) {
 	}
 
 	scope := views.ExportVisible
-	rest := args[1:]
+	// A bare `:export` reaches here with no args at all — args[1:] would
+	// panic and take the whole program down.
+	var rest []string
+	if len(args) > 1 {
+		rest = args[1:]
+	}
 	if len(rest) > 0 {
 		switch views.ExportScope(rest[0]) {
 		case views.ExportVisible, views.ExportSelected, views.ExportBookmarked:
