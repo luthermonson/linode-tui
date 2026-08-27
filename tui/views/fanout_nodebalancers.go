@@ -23,8 +23,9 @@ type FanoutNodeBalancer struct {
 
 func newFanoutNodeBalancers(d Deps) View {
 	return newListView(listOpts[FanoutNodeBalancer]{
-		Deps:  d,
-		Title: "NodeBalancers (all accounts)",
+		Deps:    d,
+		Title:   "NodeBalancers (all accounts)",
+		Refresh: fanoutDefaultRefresh,
 		Columns: []table.Column{
 			{Title: "ACCOUNT", Width: 12},
 			{Title: "ID", Width: 10},
