@@ -24,8 +24,9 @@ type FanoutLKE struct {
 
 func newFanoutLKE(d Deps) View {
 	return newListView(listOpts[FanoutLKE]{
-		Deps:  d,
-		Title: "LKE Clusters (all accounts)",
+		Deps:    d,
+		Title:   "LKE Clusters (all accounts)",
+		Refresh: fanoutDefaultRefresh,
 		Columns: []Col{
 			{Title: "ACCOUNT", Width: 12, MinWidth: 8, Priority: PriHigh},
 			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},

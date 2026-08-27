@@ -24,8 +24,9 @@ type FanoutFirewall struct {
 
 func newFanoutFirewalls(d Deps) View {
 	return newListView(listOpts[FanoutFirewall]{
-		Deps:  d,
-		Title: "Firewalls (all accounts)",
+		Deps:    d,
+		Title:   "Firewalls (all accounts)",
+		Refresh: fanoutDefaultRefresh,
 		Columns: []Col{
 			{Title: "ACCOUNT", Width: 12, MinWidth: 8, Priority: PriHigh},
 			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},

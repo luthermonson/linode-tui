@@ -131,6 +131,37 @@ func openDatabase(db linodego.Database, d Deps) tea.Cmd {
 			host,
 			port,
 		)
+		// SECURITY NOTE (known, accepted exposure): this DSN — including the
+		// root password — is templated into {{.DSN}} in config/default.go's
+		// lazysql Args and passed as a plain argv positional argument (see
+		// tools/runner.go RunWithEnv → exec.Command). Any other local user
+		// can read it via `ps`/`/proc/<pid>/cmdline` (or Task Manager's
+		// command-line column on Windows) for as long as the process runs.
+		//
+		// Investigated alternatives before accepting this:
+		//   - lazysql has no --config/-c flag to point at an arbitrary
+		//     config file, so we can't hand it a 0600 temp file the way the
+		//     kubernetes/k9s drill-in does with kubeconfig (openLKECluster
+		//     in tui/views/lke_detail.go — that path is unaffected by this
+		//     comment and still works).
+		//   - lazysql *does* support a config.toml with saved [[database]]
+		//     connections (including `${env:VAR}` interpolation for
+		//     passwords) and a project-local .lazysql.toml override, but
+		//     driving that headlessly would mean: writing a temp dir
+		//     containing .lazysql.toml, setting exec.Cmd.Dir to it,
+		//     supplying the password via extraEnv, and relying on
+		//     undocumented behavior for auto-selecting the single saved
+		//     connection non-interactively. That's unverified upstream
+		//     behavior we can't confirm without shipping and finding out —
+		//     risking a broken drill-in is worse than a known, documented
+		//     argv exposure.
+		//   - lazysql does not read a DSN from stdin or from an environment
+		//     variable as primary input, so neither of those is available
+		//     either.
+		//
+		// If lazysql ever adds a --config flag or documented non-interactive
+		// single-connection mode, switch to the temp-config-file approach
+		// used for kubeconfig above.
 		return DrillInMsg{
 			Tool: kind,
 			Vars: struct{ DSN string }{DSN: dsn},
