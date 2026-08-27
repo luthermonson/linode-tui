@@ -57,8 +57,11 @@ type Config struct {
 	// combination remembers its own size. Keys are "<primary>+<secondary>".
 	SplitRatios map[string]float64 `yaml:"split_ratios,omitempty"`
 	// AuditRetentionDays, when > 0, drops audit entries older than this on
-	// startup. 0 = keep forever (bounded only by 2 MB rotation).
-	AuditRetentionDays int `yaml:"audit_retention_days,omitempty"`
+	// startup. 0 = keep forever (bounded only by 2 MB rotation). No omitempty:
+	// an explicit 0 must survive a Save→Load round-trip — with omitempty the
+	// key was dropped on Save and Load re-seeded the 90-day default, silently
+	// re-enabling pruning for users who opted out.
+	AuditRetentionDays int `yaml:"audit_retention_days"`
 	// ReadOnly toggles a session-wide gate that blocks every mutating
 	// command-bar action. Persisted so :read-only sticks across launches.
 	ReadOnly bool `yaml:"read_only,omitempty"`
