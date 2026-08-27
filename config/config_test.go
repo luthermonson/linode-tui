@@ -458,3 +458,25 @@ func TestApplyOverridesAccountIsPersistable(t *testing.T) {
 		t.Errorf("named account token was overwritten: %q", reloaded.Accounts["staging"].Token)
 	}
 }
+
+// An explicit audit_retention_days: 0 (= keep forever) must survive a
+// Save→Load round-trip. With yaml omitempty the key was dropped on Save and
+// the next Load re-seeded the 90-day default, silently re-enabling pruning
+// for users who deliberately opted out.
+func TestAuditRetentionZeroRoundTrips(t *testing.T) {
+	cfg := newAt(t)
+	if cfg.AuditRetentionDays != 90 {
+		t.Fatalf("fresh config retention = %d, want the 90-day default", cfg.AuditRetentionDays)
+	}
+	cfg.AuditRetentionDays = 0 // user opts out of pruning
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	reloaded, err := Load(cfg.path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.AuditRetentionDays != 0 {
+		t.Errorf("retention after round-trip = %d, want 0 (keep forever)", reloaded.AuditRetentionDays)
+	}
+}
