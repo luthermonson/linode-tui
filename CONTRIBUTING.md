@@ -5,7 +5,7 @@ Thanks for your interest! This project is a Bubble Tea-based TUI for the Linode 
 ## Quick start
 
 ```bash
-git clone https://github.com/luthermonson/linode-tui && cd tui
+git clone https://github.com/luthermonson/linode-tui && cd linode-tui
 go test ./...
 go vet ./...
 go build ./cmd/linode-tui
@@ -46,7 +46,8 @@ See `AGENTS.md` for the architectural cheat-sheet — it's written for automated
 ## Tests
 
 - `go test ./...` runs everything (HTTP-mocked).
-- `LINODE_TUI_LIVE=1 go test ./livetest/...` runs against a real Linode account using `LINODE_TOKEN`. Read-only — never mutating. Skip unless you have a dev account configured.
+- `LINODE_TUI_LIVE=1 go test ./livetest/...` runs the read-only suite against a real Linode account using `LINODE_TOKEN`. Skip unless you have a dev account configured.
+- `LINODE_TUI_LIVE=1 LINODE_TUI_LIVE_MUTATE=1 go test ./livetest/...` additionally runs `livetest/mutate_test.go`, which creates and deletes real resources (e.g. spins up and tears down a Linode). Both env vars are required; only set this on a throwaway/dev account.
 
 ## Commit style
 
@@ -64,7 +65,11 @@ See `AGENTS.md` for the architectural cheat-sheet — it's written for automated
 
 ## Releasing
 
-Tags on `main` produce GoReleaser binaries plus a Homebrew tap formula. To preview locally:
+Tags on `main` (`git tag vX.Y.Z && git push origin vX.Y.Z`) run GoReleaser via `.github/workflows/release.yml`. The resulting GitHub release is created **as a draft** (`release.draft: true` in `.goreleaser.yml`) — a maintainer needs to review it and click "Publish release" before it's visible. Artifacts, `checksums.txt`, and SBOMs are attached to the draft.
+
+A Homebrew tap formula is planned but currently disabled: the `brews` block in `.goreleaser.yml` is commented out until a `HOMEBREW_TAP_TOKEN` secret (able to push to the separate `homebrew-tap` repo) is configured.
+
+To preview a build locally without touching GitHub:
 
 ```bash
 goreleaser release --snapshot --clean

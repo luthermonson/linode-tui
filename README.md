@@ -6,7 +6,7 @@ Built on Bubble Tea + linodego + urfave/cli/v3.
 
 ## Features
 
-- **12 resource views**: Linodes, Volumes, NodeBalancers, Firewalls, Images, Domains, LKE clusters, VPCs, Placement Groups, StackScripts, Object Storage, DBaaS, Events
+- **13 resource views**: Linodes, Volumes, NodeBalancers, Firewalls, Images, Domains, LKE clusters, VPCs, Placement Groups, StackScripts, Object Storage, DBaaS, Events
 - **CRUD on the important ones**: create / reboot / boot / shutdown / delete / resize / rebuild for Linodes; create + delete for NodeBalancers / Volumes / VPCs / LKE; delete on the rest (subject to API constraints — public images, non-empty buckets, etc.)
 - **Drill into specialized TUIs**:
   - `enter` on an LKE cluster → fetches its kubeconfig and execs into [k9s](https://k9scli.io/)
@@ -35,7 +35,7 @@ go install github.com/luthermonson/linode-tui/cmd/linode-tui@latest
 Or build from source:
 
 ```bash
-git clone https://github.com/luthermonson/linode-tui && cd tui
+git clone https://github.com/luthermonson/linode-tui && cd linode-tui
 go build -o linode-tui ./cmd/linode-tui
 ```
 
@@ -238,7 +238,9 @@ linode-tui completion pwsh
 
 ## Releases
 
-Cross-platform binaries (Linux / macOS / Windows × amd64/arm64) are produced by [GoReleaser](https://goreleaser.com/) on every tag — see `.goreleaser.yml`. Artifacts and `checksums.txt` are attached to each GitHub release; a `homebrew-tap` formula is updated for `brew install luthermonson/tap/linode-tui`.
+Cross-platform binaries (Linux / macOS / Windows × amd64/arm64) are produced by [GoReleaser](https://goreleaser.com/) on every tag — see `.goreleaser.yml`. Artifacts and `checksums.txt` are attached to each GitHub release **as a draft**; a maintainer publishes it manually after review. Grab binaries from the [Releases page](https://github.com/luthermonson/linode-tui/releases).
+
+A Homebrew tap (`brew install luthermonson/tap/linode-tui`) is planned but not yet active — the `brews` block in `.goreleaser.yml` is commented out pending a `HOMEBREW_TAP_TOKEN` secret that can push to the separate tap repo.
 
 Cut a release locally with:
 

@@ -4,7 +4,9 @@ project_name: linode-tui
 
 before:
   hooks:
-    - go mod tidy
+    # `go mod download` only — `go mod tidy` can mutate go.mod/go.sum, which
+    # is a reproducibility hole during a release build.
+    - go mod download
 
 builds:
   - id: linode-tui
@@ -44,6 +46,7 @@ archives:
       - LICENSE*
       - README*
       - AGENTS*
+      - docs/USAGE.md
 
 checksum:
   name_template: "checksums.txt"

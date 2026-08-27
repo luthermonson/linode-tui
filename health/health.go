@@ -73,7 +73,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) []Result {
 					Name:       "audit-log",
 					Optional:   true,
 					Detail:     fmt.Sprintf("%d bytes (>%dB; rotates at 2MiB)", info.Size(), warnAt),
-					Suggestion: "linode-tui audit purge --older-than 720h  (or :audit clear in the TUI)",
+					Suggestion: ":audit purge 720h  (or :audit clear in the TUI)",
 				})
 			default:
 				out = append(out, Result{
@@ -234,7 +234,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) []Result {
 				Name:       "bookmark-scope",
 				Optional:   true,
 				Detail:     fmt.Sprintf("global has %d kind(s), account %q has %d (account wins; global is shadowed)", len(cfg.Bookmarks), cfg.DefaultAccount, len(acct.Bookmarks)),
-				Suggestion: "run `:bookmark migrate` (or `linode-tui bookmark migrate`) to consolidate",
+				Suggestion: "run `:bookmark migrate` in the TUI to consolidate",
 				Group:      "runtime",
 			})
 		}

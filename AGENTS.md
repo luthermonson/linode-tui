@@ -25,25 +25,32 @@ Use `urfave/cli/v3` (not cobra). Use `bubbletea`'s message-driven model — no g
 
 ```
 cmd/linode-tui/        # urfave entrypoint; just calls into cli
-cli/          # urfave app, flags, subcommands
+cli/          # urfave app, flags, subcommands (default, version, doctor, completion)
 config/       # YAML config, defaults, theme/account/tool persistence
-linode/       # linodego client wrapper, pagination, rate-limit handling
+linode/       # linodego client wrapper, pagination, rate-limit handling, clear-account
+audit/        # JSON-lines audit log: append, tail, grep, purge, rotation
+cache/        # ~/.cache/linode-tui inspection: per-subdir sizes, byte formatting
+health/       # checks shared by `linode-tui doctor` and `:doctor` (cli ↔ tui neutral)
+buildinfo/    # version/commit set at build time (ldflags, with a runtime/debug fallback)
+livetest/     # opt-in integration tests against the real Linode API
 onepassword/  # `op` CLI shell-out for token resolution
 tools/        # external exec (k9s, lazysql, …): resolve, install, run
 tui/
   app.go               # root Bubble Tea model: header + body + footer + cmdbar
+  clear_account.go     # `:clear-account` form + confirm flow
   keys/                # global keymap, per-view keymap composition
   theme/               # lipgloss styles for light/dark/dracula/solarized-light/gruvbox-dark/gruvbox-light
   cmdbar/              # `:` command palette
   views/
-    registry.go        # name → view factory; how `:` dispatches
-    instances.go
+    registry.go        # View interface, Register/RegisterChild, name+alias lookup
+    actions.go          # shared per-row Action wiring used by every view
+    instances.go        # registers itself via init() -> Register(...)
     nodebalancers.go
     lke.go
     ...
 ```
 
-Keep each resource view in one file under `tui/views/`. Each view implements a small interface (see `registry.go`).
+Keep each resource view in one file under `tui/views/`. Each view implements `View` (see `registry.go`): a `tea.Model` plus `Title() string` — there's no separate `KeyMap` method on the interface.
 
 ## Conventions
 
@@ -55,7 +62,7 @@ Keep each resource view in one file under `tui/views/`. Each view implements a s
 - **Refresh**: views accept a refresh interval (default 2s) and emit a `tea.Tick` themselves. Don't spawn raw goroutines; use `tea.Cmd`.
 - **Pagination**: `linodego` auto-walks all pages when `ListXxx(ctx, nil)` is called (see `handlePaginatedResults` in `request_helpers.go`). Don't add page loops to view listers — they already see every page. If you need a specific page, pass a `*linodego.ListOptions` with `PageOptions.Page` set.
 - **Retries**: `linodego.NewClient` calls `SetRetries()` by default — it retries 429s, 503s, Linode-busy responses, request timeouts, GOAWAY frames, and NGINX transient errors with exponential backoff. Don't add an outer retry loop. Add additional conditions via `c.Raw().AddRetryCondition(...)` if needed.
-- **Mouse**: `tea.WithMouseCellMotion` is enabled in `tui.Run`. `listView` translates wheel-up/down into `table.MoveUp(3)`/`MoveDown(3)`. Click-to-select isn't wired — `bubbles/table` doesn't expose row hit-testing, so the row-Y math is ours to do if we want it. Most users will keep using arrow / `j` / `k`.
+- **Mouse**: `tea.WithMouseCellMotion` is enabled only when `cfg.Mouse` is true (default **off** — capturing the mouse disables the terminal's native text selection). Toggle live with `:mouse` / `:mouse on|off`; persisted to config. `listView` translates wheel-up/down into `table.MoveUp(3)`/`MoveDown(3)`. Click-to-select isn't wired — `bubbles/table` doesn't expose row hit-testing, so the row-Y math is ours to do if we want it. Most users will keep using arrow / `j` / `k`.
 - **Watchlist freshness**: `:watchlist` refetches every `cfg.Refresh` (2s by default), so a bookmark toggled in another view shows up on the next tick. Forcing an immediate refresh requires a global event bus — punted; it'd add coupling for a ~2s win.
 - **Mutations**: destructive actions (delete, reboot, power-off, resize, rebuild) MUST go through a confirm modal. No exceptions — even `:delete-everything` style helpers.
 - **Secrets**: never write resolved tokens to disk. The config stores 1Password references (`op://Vault/Item/credential`) or, for testing, a literal token. Resolved tokens live only in memory.
@@ -84,12 +91,12 @@ tools:
     auto_install: true
   mysql:
     exec: lazysql
-    args: ["-driver", "mysql", "-url", "{{.DSN}}"]
+    args: ["{{.DSN}}"]
     mode: tui
     auto_install: true
   postgresql:
     exec: lazysql
-    args: ["-driver", "postgres", "-url", "{{.DSN}}"]
+    args: ["{{.DSN}}"]
     mode: tui
     auto_install: true
 ```
@@ -99,24 +106,26 @@ Templating uses Go's `text/template`. Variables passed in depend on the tool —
 ## CLI surface
 
 - Bare `linode-tui` → TUI. Flags: `--token`, `--account`, `--refresh`, `--theme`, `--config`, `--debug`.
-- `linode-tui version` → version + commit + linodego version.
-- Future: `linode-tui clear-account` (deferred; do not implement until explicitly asked).
+- `linode-tui version` → prints `linode-tui <version> (<commit>)`. No linodego version in the output.
+- `linode-tui doctor` → health checks (config / tools / runtime / layout); `--json`, `--watch`, `--fix`, `--strict`, `--section`, `--group`.
+- `linode-tui completion` / `install-completion` → shell completion.
+- No `clear-account` CLI subcommand — it's a TUI-only verb, see below.
 
 No headless `list`/`get` subcommands — the [official linode-cli](https://github.com/linode/linode-cli) already does that. This binary is a TUI plus the occasional utility command that does something the official CLI doesn't.
 
 ## How to add a new resource view
 
 1. Create `tui/views/<resource>.go`.
-2. Implement the `View` interface (`Init`, `Update`, `View`, `KeyMap`, `Title`).
-3. Register in `tui/views/registry.go` with name + aliases (e.g. `instances`, `linodes`, `inst`, `li`).
+2. Implement the `View` interface — a `tea.Model` (`Init`, `Update`, `View`) plus `Title() string`. Most views build on the generic `listView[T]` framework in `tui/views/listview.go` rather than implementing the raw interface by hand.
+3. In that file's own `init()`, call `Register("<name>", []string{"alias1", "alias2", ...}, newYourView)` (or `RegisterChild` for a context-only drill-in) — registration lives with the view, not centrally in `registry.go`.
 4. Add hotkeys to the per-view keymap. Re-use shared keys (`enter`, `/`, `?`, `esc`) — don't redefine them.
-5. If the view supports mutations, wire each through `huh` confirm forms in `tui/views/<resource>_actions.go`.
+5. If the view supports mutations, wire each through `huh` confirm forms using the shared per-row `Action` plumbing in `tui/views/actions.go` (there's one shared file, not one per resource).
 6. Test list pagination with at least 200 fake records to exercise the `bubbles/table` virtualization.
 
 ## How to add a new external tool
 
 1. Add the default entry to `config/default.go`.
-2. If `auto_install: true` is supported, add a release fetcher in `tools/install/`.
+2. If `auto_install: true` is supported, add/extend the release fetcher in `tools/release.go`; the lazy-install pipeline itself lives in `tools/install.go` (there's no `tools/install/` subdirectory).
 3. Define the per-tool context struct (what `{{.Kubeconfig}}` / `{{.DSN}}` resolve to) and surface it from the view that invokes the tool.
 4. Document the new tool in this file's tools list.
 
@@ -132,10 +141,18 @@ No headless `list`/`get` subcommands — the [official linode-cli](https://githu
 - **Don't commit secrets.** Never check in a `LINODE_TOKEN`, a real `op://` reference to a personal vault, or a populated `config.local.yaml`.
 - **Don't add "Generated with Claude Code" or `Co-Authored-By` footers to commits or PRs.**
 
+## `:clear-account` (implemented)
+
+`:clear-account` bulk-deletes every resource in the active account — instances, volumes, nodebalancers, LKE clusters, firewalls, domains, custom images, owned stackscripts, VPCs/subnets, placement groups, DBaaS, object storage buckets. See `linode/clear.go` (`ClearAccount`, `ClearGuard`) and `tui/clear_account.go` for the TUI form.
+
+- `:clear-account dry-run` previews the delete plan, no confirmation needed.
+- `:clear-account` requires typing the active account's name in a confirm popup before it executes.
+- `ClearGuard` refuses any account whose name contains `prod` (case-insensitive) unless explicitly forced.
+- Deletes in dependency-aware order; resources the API won't let go (public images, non-empty buckets, …) are skipped rather than failing the whole run.
+
 ## Out of scope (for now)
 
 - Headless list/get subcommands (use `linode-cli`).
 - Longview view (metrics shape doesn't fit a table-driven UI).
 - Create/resize forms for resources beyond Linodes, NodeBalancers, LKE, VPCs, Volumes (v2).
-- `clear-account` utility (planned, but do not implement until requested).
 - Multi-tenant token storage encryption (we rely on 1Password for at-rest).

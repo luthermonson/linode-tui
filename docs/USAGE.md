@@ -128,7 +128,6 @@ A layout = which view goes in each of up to 4 panes plus the split ratios. You c
 - **Load** a saved one: `:layout load dev`
 - **List** them with descriptions: `:layout list`
 - **Rename / delete**: `:layout rename old new`, `:layout delete old`
-- **Diff**: `:layout diff` (use the CLI for clean output)
 - **Export / import** to a YAML file: `:layout export dev ~/dev.yaml`, `:layout import ~/dev.yaml`
 - **Import from URL** with optional sha256 pin: `:layout import-from https://example.com/dev.yaml?sha256=…`
 - **Share** a pinned URL: `:layout share dev https://example.com/dev.yaml` → opens a modal with the digest already appended
@@ -290,8 +289,8 @@ Scope: global by default. When you switch to per-account scope (`:bookmark scope
 
 A named layout captures up to 4 pane assignments + split ratios. Use them as workspace templates ("the prod dashboard", "the on-call view"). Share them by serving the YAML over HTTPS with `?sha256=<digest>` pinned in the URL:
 
-1. `:layout fingerprint dev` → get the sha256
-2. Append to your URL: `https://example.com/dev.yaml?sha256=<digest>`
+1. Export the layout to a file: `:layout export dev ~/dev.yaml`
+2. Host that file somewhere over HTTPS, then get a pinned URL in one step: `:layout pin dev https://example.com/dev.yaml` (or `:layout share dev https://example.com/dev.yaml` to also open it in your browser) — both compute the sha256 and append `?sha256=<digest>` for you
 3. Recipient runs `:layout import-from <url>` — verified before save
 
 A digest is persisted (per-account and globally) so a re-fetch from an unpinned URL warns when upstream changed.
@@ -416,8 +415,8 @@ linode-tui doctor --watch 30s --json --no-color | your-dashboard
 ### "Share a layout with my teammates"
 
 ```
-# you (in the TUI):
-:layout export-all ./layouts
+# you (in the TUI, once per layout you want to share):
+:layout export dev ./layouts/dev.yaml
 # upload layouts/dev.yaml somewhere over HTTPS
 :layout pin dev https://example.com/layouts/dev.yaml
 # → outputs: https://example.com/layouts/dev.yaml?sha256=…

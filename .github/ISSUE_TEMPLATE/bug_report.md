@@ -20,7 +20,12 @@ labels: bug
 ## Environment
 
 - `linode-tui version`:
+- `linode-tui doctor --json` output:
+  ```
+  <!-- paste output here -->
+  ```
 - OS / terminal:
+- Terminal size (cols x rows):
 - Go version (if built from source):
 - Theme:
 - External tools involved (k9s, lazysql, op): version + how installed

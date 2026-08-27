@@ -1,7 +1,7 @@
 // Package livetest holds read-only integration tests that hit the real Linode
 // API. Skipped by default; enable with:
 //
-//	LINODE_TUI_LIVE=1 LINODE_TOKEN=... go test ./internal/livetest/...
+//	LINODE_TUI_LIVE=1 LINODE_TOKEN=... go test ./livetest/...
 //
 // These tests never mutate resources. Add new tests sparingly — they consume
 // real API quota.
