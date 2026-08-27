@@ -33,9 +33,12 @@ func NewApp(version, commit string) *cli.Command {
 				Usage: "named account from config to use",
 			},
 			&cli.DurationFlag{
-				Name:  "refresh",
-				Usage: "auto-refresh interval for resource views",
-				Value: 2 * time.Second,
+				Name: "refresh",
+				// No Value: a flag default is indistinguishable from an
+				// explicit value at read time, so it silently overwrote
+				// `refresh:` from config.yaml on every launch. The effective
+				// default lives in config.Default().
+				Usage: "auto-refresh interval for resource views (default 2s, or config `refresh:`)",
 			},
 			&cli.StringFlag{
 				Name:  "theme",
@@ -109,11 +112,12 @@ func runTUI(ctx context.Context, c *cli.Command) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 	cfg.ApplyOverrides(config.Overrides{
-		Token:   c.String("token"),
-		Account: c.String("account"),
-		Refresh: c.Duration("refresh"),
-		Theme:   c.String("theme"),
-		Debug:   c.Bool("debug"),
+		Token:      c.String("token"),
+		Account:    c.String("account"),
+		Refresh:    c.Duration("refresh"),
+		RefreshSet: c.IsSet("refresh"),
+		Theme:      c.String("theme"),
+		Debug:      c.Bool("debug"),
 	})
 
 	var primary string

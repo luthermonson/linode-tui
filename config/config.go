@@ -5,10 +5,35 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// CLIAccount is the synthetic account name used when a token arrives from
+// --token / LINODE_TOKEN instead of the config file. It is an in-memory-only
+// construct: Save never serializes it, so an incidental save (bookmark,
+// :mouse, tool install) can't leak an environment token to disk or make the
+// ephemeral account sticky as default_account.
+const CLIAccount = "__cli__"
+
+// MinRefresh is the floor for every refresh interval. Anything smaller is a
+// self-inflicted rate-limit (429s from the Linode API) and paints the TUI
+// faster than a terminal can draw, so sub-second values are clamped on Load.
+const MinRefresh = time.Second
+
+// saveMu serializes Save. Config is mutated from the UI goroutine while
+// background goroutines (tool installs) call Save, so without this two
+// concurrent marshal+write pairs could interleave and leave a truncated or
+// interleaved config.yaml on disk.
+//
+// NOTE: this removes the torn-file risk but not the underlying data race on
+// Config's maps — a concurrent mutation during marshal is still a race. A
+// future refactor should funnel all mutations through a single owner (or give
+// Config a real RWMutex with accessors); doing that now would mean touching
+// every call site across tui/.
+var saveMu sync.Mutex
 
 type Config struct {
 	DefaultAccount string             `yaml:"default_account"`
@@ -63,6 +88,10 @@ type Config struct {
 
 	path  string
 	debug bool
+	// persistedAccount is the default_account that was read from disk (or set
+	// via --account). Save writes this instead of the synthetic CLIAccount so
+	// an ephemeral token session never rewrites default_account.
+	persistedAccount string
 }
 
 // NamedLayout captures a complete pane configuration so :layout load can
@@ -253,8 +282,12 @@ type Overrides struct {
 	Token   string
 	Account string
 	Refresh time.Duration
-	Theme   string
-	Debug   bool
+	// RefreshSet distinguishes "user passed --refresh" from "flag defaulted".
+	// Without it a flag default silently clobbers `refresh:` from the config
+	// file on every launch.
+	RefreshSet bool
+	Theme      string
+	Debug      bool
 }
 
 func Load(path string) (*Config, error) {
@@ -280,19 +313,67 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if cfg.Accounts == nil {
+		cfg.Accounts = map[string]Account{}
+	}
 	cfg.fillToolDefaults()
+	cfg.normalize()
+	cfg.persistedAccount = cfg.DefaultAccount
 	return cfg, nil
+}
+
+// normalize repairs values that are syntactically valid YAML but semantically
+// unusable: sub-second refresh intervals and a default_account that names an
+// account the file doesn't define.
+func (c *Config) normalize() {
+	if c.Refresh <= 0 {
+		c.Refresh = Default().Refresh
+	} else if c.Refresh < MinRefresh {
+		c.Refresh = MinRefresh
+	}
+	clampRefreshMap(c.RefreshOverrides)
+	for _, acct := range c.Accounts {
+		// RefreshOverrides is a map, so mutating it in place is visible
+		// through the map value copy.
+		clampRefreshMap(acct.RefreshOverrides)
+	}
+	// A default_account with no matching accounts entry resolves to an empty
+	// token and fails deep in the client with a confusing error. Clear it so
+	// the normal "no active account" path runs instead. Silent by design:
+	// Load has no logger and the TUI hasn't started yet.
+	if c.DefaultAccount != "" && c.DefaultAccount != CLIAccount {
+		if _, ok := c.Accounts[c.DefaultAccount]; !ok {
+			c.DefaultAccount = ""
+		}
+	}
+}
+
+func clampRefreshMap(m map[string]time.Duration) {
+	for k, v := range m {
+		if v > 0 && v < MinRefresh {
+			m[k] = MinRefresh
+		} else if v <= 0 {
+			delete(m, k)
+		}
+	}
 }
 
 func (c *Config) ApplyOverrides(o Overrides) {
 	if o.Token != "" {
-		c.Accounts["__cli__"] = Account{Token: o.Token}
-		c.DefaultAccount = "__cli__"
+		if c.Accounts == nil {
+			c.Accounts = map[string]Account{}
+		}
+		c.Accounts[CLIAccount] = Account{Token: o.Token}
+		c.DefaultAccount = CLIAccount
 	}
 	if o.Account != "" {
 		c.DefaultAccount = o.Account
+		c.persistedAccount = o.Account
 	}
-	if o.Refresh > 0 {
+	if o.RefreshSet && o.Refresh > 0 {
+		if o.Refresh < MinRefresh {
+			o.Refresh = MinRefresh
+		}
 		c.Refresh = o.Refresh
 	}
 	if o.Theme != "" {
@@ -304,18 +385,64 @@ func (c *Config) ApplyOverrides(o Overrides) {
 func (c *Config) Debug() bool { return c.debug }
 func (c *Config) Path() string { return c.path }
 
+// Save serializes the config to disk. It is safe to call concurrently, never
+// writes the ephemeral CLIAccount (or its token) to disk, and replaces the
+// file atomically so a crash mid-write can't destroy the account list.
 func (c *Config) Save() error {
 	if c.path == "" {
 		return errors.New("config: no path set")
 	}
-	if err := os.MkdirAll(filepath.Dir(c.path), 0o755); err != nil {
-		return err
-	}
-	data, err := yaml.Marshal(c)
+
+	saveMu.Lock()
+	defer saveMu.Unlock()
+
+	data, err := yaml.Marshal(c.persistableCopy())
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.path, data, 0o600)
+
+	// 0700, not 0755: this directory holds a 0600 token file, and a
+	// world-readable parent leaks the file list to every local user.
+	if err := os.MkdirAll(filepath.Dir(c.path), 0o700); err != nil {
+		return err
+	}
+	// Write-then-rename: os.WriteFile truncates in place, so a crash (or a
+	// full disk) between truncate and write left every account and token
+	// gone. Rename is atomic on POSIX and on Windows (MoveFileEx).
+	tmp := c.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, c.path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// persistableCopy returns a shallow copy of c with the synthetic CLIAccount
+// scrubbed. The token behind --token/LINODE_TOKEN belongs to the environment,
+// not to config.yaml, and default_account must not stick to "__cli__" — both
+// happened on the first incidental Save of a token-flag session.
+func (c *Config) persistableCopy() *Config {
+	snap := *c
+	if _, ok := snap.Accounts[CLIAccount]; ok {
+		accounts := make(map[string]Account, len(snap.Accounts))
+		for name, acct := range snap.Accounts {
+			if name == CLIAccount {
+				continue
+			}
+			accounts[name] = acct
+		}
+		snap.Accounts = accounts
+	}
+	if snap.DefaultAccount == CLIAccount {
+		snap.DefaultAccount = c.persistedAccount
+		if snap.DefaultAccount == CLIAccount {
+			snap.DefaultAccount = ""
+		}
+	}
+	return &snap
 }
 
 func defaultPath() (string, error) {
@@ -335,6 +462,10 @@ func (c *Config) fillToolDefaults() {
 	c.Tools.MySQL = mergeTool(c.Tools.MySQL, d.Tools.MySQL)
 	c.Tools.PostgreSQL = mergeTool(c.Tools.PostgreSQL, d.Tools.PostgreSQL)
 	c.Tools.Lish = mergeTool(c.Tools.Lish, d.Tools.Lish)
+	// SSH was missing here, so any config written before `tools.ssh` existed
+	// resolved to an empty Exec and `c` on a Linode row failed with
+	// "ssh: exec not configured".
+	c.Tools.SSH = mergeTool(c.Tools.SSH, d.Tools.SSH)
 }
 
 func mergeTool(have, def Tool) Tool {

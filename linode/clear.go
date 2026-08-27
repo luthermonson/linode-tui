@@ -16,10 +16,23 @@ type ClearOptions struct {
 	Execute bool // false = dry-run
 	Exclude []string
 	Grep    string
+	// Force bypasses the "prod" name guard in ClearGuard.
+	Force bool
+	// ExpectedUsername, when set, must match the username the client's token
+	// resolves to via /profile. Account is only a local config label — it says
+	// nothing about which Linode account the token actually opens. Without
+	// this check, `accounts: {dev: {token: <prod token>}}` (a copy/paste, an
+	// op_ref pointing at the wrong item, a stale LINODE_TOKEN in the shell)
+	// destroys production while the confirmation prompt says "dev".
+	ExpectedUsername string
 }
 
 // ClearGuard validates an account name before a clear run. Names containing
-// "prod" are refused unless force is set.
+// "prod" are refused unless force is set. ClearAccount calls this itself, so
+// callers get the check for free; call it early only to fail fast in the UI.
+//
+// This is a name check on a local label — it proves nothing about which Linode
+// account the token opens. ClearOptions.ExpectedUsername is the real defence.
 func ClearGuard(name string, force bool) error {
 	if name == "" {
 		return fmt.Errorf("account name is required")
@@ -35,7 +48,22 @@ func ClearGuard(name string, force bool) error {
 // stackscripts, VPCs+subnets, placement groups, DBaaS, object storage
 // buckets) and deletes them, writing a line per action to out. Dry-run unless
 // opts.Execute is set.
+//
+// Before deleting anything it runs ClearGuard and, when
+// opts.ExpectedUsername is set, verifies the token's /profile identity. Every
+// API call derives from ctx, so cancelling ctx stops the run.
 func ClearAccount(ctx context.Context, client *Client, opts ClearOptions, out io.Writer) error {
+	// Guard here rather than trusting callers to do it. Every path into a
+	// destroy — TUI, CLI, a future script — goes through this function, so
+	// this is the only place the check can't be forgotten.
+	if err := ClearGuard(opts.Account, opts.Force); err != nil {
+		return err
+	}
+	// Verify the token's real identity before the first delete.
+	if err := verifyIdentity(ctx, client, opts); err != nil {
+		return err
+	}
+
 	exclude := map[string]bool{}
 	for _, s := range opts.Exclude {
 		exclude[strings.TrimSpace(s)] = true
@@ -48,11 +76,16 @@ func ClearAccount(ctx context.Context, client *Client, opts ClearOptions, out io
 	}
 	w.printf("\n")
 
+	// Order matters. LKE goes first: a cluster's node pools recreate any
+	// worker Linode deleted underneath them, and the cluster's CCM/CSI
+	// controllers recreate NodeBalancers and volumes it owns. Deleting the
+	// cluster first stops the reconcilers, then the sweeps below mop up
+	// anything that wasn't cluster-owned.
 	steps := []clearStep{
+		{kind: "lke", run: clearLKEClusters},
 		{kind: "instances", run: clearInstances},
 		{kind: "volumes", run: clearVolumes},
 		{kind: "nodebalancers", run: clearNodeBalancers},
-		{kind: "lke", run: clearLKEClusters},
 		{kind: "firewalls", run: clearFirewalls},
 		{kind: "domains", run: clearDomains},
 		{kind: "images", run: clearImages},
@@ -63,6 +96,12 @@ func ClearAccount(ctx context.Context, client *Client, opts ClearOptions, out io
 		{kind: "objectstorage", run: clearObjectStorage},
 	}
 	for _, s := range steps {
+		// Honour cancellation between steps as well as inside them, so
+		// Ctrl+C stops the run instead of only failing the in-flight call.
+		if err := ctx.Err(); err != nil {
+			w.printf("aborted before %s: %v\n", s.kind, err)
+			return fmt.Errorf("clear-account aborted: %w", err)
+		}
 		if exclude[s.kind] {
 			w.printf("[skip] %s\n", s.kind)
 			continue
@@ -74,7 +113,42 @@ func ClearAccount(ctx context.Context, client *Client, opts ClearOptions, out io
 	if w.failures > 0 {
 		return fmt.Errorf("%d failures during clear-account", w.failures)
 	}
+	if len(w.skipped) > 0 && !w.dry {
+		// The account is NOT empty — reporting "done" here has previously read
+		// as success and left billable resources behind.
+		w.printf("done (partial) · mode: %s · %d resource(s) left behind\n", modeStr(w.dry), len(w.skipped))
+		return fmt.Errorf("clear-account incomplete, %d resource(s) left behind: %s",
+			len(w.skipped), strings.Join(w.skipped, ", "))
+	}
 	w.printf("done · mode: %s\n", modeStr(w.dry))
+	return nil
+}
+
+// verifyIdentity resolves the token's own /profile and refuses the run when it
+// doesn't match opts.ExpectedUsername. Runs before any deletion, and an
+// inability to resolve the profile is itself fatal — an unverifiable token is
+// not a token to hand a destroy to.
+func verifyIdentity(ctx context.Context, client *Client, opts ClearOptions) error {
+	want := strings.TrimSpace(opts.ExpectedUsername)
+	if want == "" {
+		return nil
+	}
+	if client == nil {
+		return fmt.Errorf("refusing to clear %q: no API client", opts.Account)
+	}
+	pctx, cancel := clearTimeout(ctx, 15*time.Second)
+	defer cancel()
+	prof, err := client.Raw().GetProfile(pctx)
+	if err != nil {
+		return fmt.Errorf("refusing to clear %q: cannot verify token identity: %w", opts.Account, err)
+	}
+	if prof == nil {
+		return fmt.Errorf("refusing to clear %q: empty profile response", opts.Account)
+	}
+	if !strings.EqualFold(strings.TrimSpace(prof.Username), want) {
+		return fmt.Errorf("refusing to clear %q: token belongs to user %q, expected %q",
+			opts.Account, prof.Username, want)
+	}
 	return nil
 }
 
@@ -95,6 +169,10 @@ type clearWriter struct {
 	dry      bool
 	grep     string
 	failures int
+	// skipped records resources that were deliberately not deleted (e.g.
+	// non-empty object storage buckets) so the run can report a partial
+	// completion instead of a bare "done".
+	skipped []string
 }
 
 // matchGrep reports whether label passes the grep filter (case-insensitive
@@ -119,8 +197,17 @@ func (w *clearWriter) fail(action, name string, err error) {
 	w.printf("  ! %s %s: %v\n", action, name, err)
 }
 
-func clearTimeout(d time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), d)
+func (w *clearWriter) skip(name, reason string) {
+	w.skipped = append(w.skipped, name)
+	w.printf("  [skip] %s (%s)\n", name, reason)
+}
+
+// clearTimeout derives a per-call deadline from the caller's context. It used
+// to start from context.Background(), which detached every delete from the
+// caller — Ctrl+C (or a parent timeout) could not stop a destroy already in
+// flight, it just ran to completion unobserved.
+func clearTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, d)
 }
 
 func clearInstances(ctx context.Context, c *Client, w *clearWriter) {
@@ -138,7 +225,7 @@ func clearInstances(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteInstance(ictx, it.ID)
 		cancel()
 		if err != nil {
@@ -161,7 +248,7 @@ func clearVolumes(ctx context.Context, c *Client, w *clearWriter) {
 			action := dryOr("detach", w.dry)
 			w.ok(action, fmt.Sprintf("volume %s (id %d, attached to %d)", v.Label, v.ID, *v.LinodeID))
 			if !w.dry {
-				dctx, cancel := clearTimeout(30 * time.Second)
+				dctx, cancel := clearTimeout(ctx, 30*time.Second)
 				if err := c.Raw().DetachVolume(dctx, v.ID); err != nil {
 					w.fail("detach", fmt.Sprintf("volume %d", v.ID), err)
 				}
@@ -173,7 +260,7 @@ func clearVolumes(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteVolume(ictx, v.ID)
 		cancel()
 		if err != nil {
@@ -201,7 +288,7 @@ func clearNodeBalancers(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteNodeBalancer(ictx, nb.ID)
 		cancel()
 		if err != nil {
@@ -225,7 +312,7 @@ func clearLKEClusters(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(60 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 60*time.Second)
 		err := c.Raw().DeleteLKECluster(ictx, l.ID)
 		cancel()
 		if err != nil {
@@ -249,7 +336,7 @@ func clearFirewalls(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteFirewall(ictx, f.ID)
 		cancel()
 		if err != nil {
@@ -273,7 +360,7 @@ func clearDomains(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteDomain(ictx, d.ID)
 		cancel()
 		if err != nil {
@@ -300,7 +387,7 @@ func clearImages(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteImage(ictx, img.ID)
 		cancel()
 		if err != nil {
@@ -327,7 +414,7 @@ func clearStackScripts(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteStackscript(ictx, s.ID)
 		cancel()
 		if err != nil {
@@ -352,7 +439,7 @@ func clearVPCs(ctx context.Context, c *Client, w *clearWriter) {
 			if w.dry {
 				continue
 			}
-			ictx, cancel := clearTimeout(30 * time.Second)
+			ictx, cancel := clearTimeout(ctx, 30*time.Second)
 			err := c.Raw().DeleteVPCSubnet(ictx, v.ID, sub.ID)
 			cancel()
 			if err != nil {
@@ -364,7 +451,7 @@ func clearVPCs(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteVPC(ictx, v.ID)
 		cancel()
 		if err != nil {
@@ -388,7 +475,7 @@ func clearPlacementGroups(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeletePlacementGroup(ictx, pg.ID)
 		cancel()
 		if err != nil {
@@ -412,7 +499,7 @@ func clearDatabases(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(60 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 60*time.Second)
 		err := deleteDatabaseByEngine(ictx, c, db)
 		cancel()
 		if err != nil {
@@ -443,7 +530,8 @@ func clearObjectStorage(ctx context.Context, c *Client, w *clearWriter) {
 			continue
 		}
 		if b.Objects > 0 {
-			w.printf("  [skip] bucket %s (%d objects — empty manually first)\n", b.Label, b.Objects)
+			w.skip(fmt.Sprintf("bucket %s", b.Label),
+				fmt.Sprintf("%d objects — empty manually first", b.Objects))
 			continue
 		}
 		action := dryOr("delete", w.dry)
@@ -451,7 +539,7 @@ func clearObjectStorage(ctx context.Context, c *Client, w *clearWriter) {
 		if w.dry {
 			continue
 		}
-		ictx, cancel := clearTimeout(30 * time.Second)
+		ictx, cancel := clearTimeout(ctx, 30*time.Second)
 		err := c.Raw().DeleteObjectStorageBucket(ictx, b.Region, b.Label)
 		cancel()
 		if err != nil {
