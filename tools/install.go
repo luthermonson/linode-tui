@@ -268,7 +268,7 @@ func httpGetProgress(ctx context.Context, url string, maxBytes int64, progress P
 	}
 	// Read one byte past the limit so we can tell "exactly at the limit"
 	// apart from "truncated because it was too big" and error on the latter.
-	var r io.Reader = io.LimitReader(resp.Body, maxBytes+1)
+	r := io.LimitReader(resp.Body, maxBytes+1)
 	if progress != nil {
 		r = &progressReader{r: r, total: resp.ContentLength, fn: progress}
 	}
