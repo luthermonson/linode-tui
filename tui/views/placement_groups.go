@@ -48,9 +48,11 @@ func newPlacementGroups(d Deps) View {
 		IDFn: func(pg linodego.PlacementGroup) string { return strconv.Itoa(pg.ID) },
 		Actions: []Action[linodego.PlacementGroup]{
 			{
-				Key:    "d",
-				Label:  "delete",
-				Prompt: func(pg linodego.PlacementGroup) string { return fmt.Sprintf("DELETE placement group %s (id %d)?", pg.Label, pg.ID) },
+				Key:   "d",
+				Label: "delete",
+				Prompt: func(pg linodego.PlacementGroup) string {
+					return fmt.Sprintf("DELETE placement group %s (id %d)?", pg.Label, pg.ID)
+				},
 				Run: func(ctx context.Context, c *linode.Client, pg linodego.PlacementGroup) error {
 					return c.Raw().DeletePlacementGroup(ctx, pg.ID)
 				},

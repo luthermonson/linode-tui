@@ -56,12 +56,14 @@ func newDatabases(d Deps) View {
 		},
 		IDFn:         func(db linodego.Database) string { return strconv.Itoa(db.ID) },
 		BookmarkKind: "databases",
-		OnEnter: openDatabase,
+		OnEnter:      openDatabase,
 		Actions: []Action[linodego.Database]{
 			{
-				Key:    "d",
-				Label:  "delete",
-				Prompt: func(db linodego.Database) string { return fmt.Sprintf("DELETE %s database %s (id %d)?", db.Engine, db.Label, db.ID) },
+				Key:   "d",
+				Label: "delete",
+				Prompt: func(db linodego.Database) string {
+					return fmt.Sprintf("DELETE %s database %s (id %d)?", db.Engine, db.Label, db.ID)
+				},
 				Run: func(ctx context.Context, c *linode.Client, db linodego.Database) error {
 					switch {
 					case strings.HasPrefix(db.Engine, "mysql"):

@@ -64,7 +64,7 @@ func newInstances(d Deps) View {
 				}
 			}
 		},
-		TagsFn:       func(it linodego.Instance) []string { return it.Tags },
+		TagsFn: func(it linodego.Instance) []string { return it.Tags },
 		FieldFn: map[string]func(linodego.Instance) string{
 			"region": func(it linodego.Instance) string { return it.Region },
 			"type":   func(it linodego.Instance) string { return it.Type },
@@ -105,9 +105,11 @@ func newInstances(d Deps) View {
 				},
 			},
 			{
-				Key:    "d",
-				Label:  "delete",
-				Prompt: func(it linodego.Instance) string { return fmt.Sprintf("DELETE %s (id %d)? This cannot be undone.", it.Label, it.ID) },
+				Key:   "d",
+				Label: "delete",
+				Prompt: func(it linodego.Instance) string {
+					return fmt.Sprintf("DELETE %s (id %d)? This cannot be undone.", it.Label, it.ID)
+				},
 				Run: func(ctx context.Context, c *linode.Client, it linodego.Instance) error {
 					return c.Raw().DeleteInstance(ctx, it.ID)
 				},

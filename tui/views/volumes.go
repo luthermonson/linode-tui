@@ -12,7 +12,6 @@ import (
 	"github.com/luthermonson/linode-tui/linode"
 )
 
-
 func init() {
 	Register("volumes", []string{"vol", "vols"}, newVolumes)
 }

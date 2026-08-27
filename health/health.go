@@ -304,15 +304,15 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) []Result {
 
 	// Tag groups for any Result that didn't set one inline.
 	groupByName := map[string]string{
-		"config":    "config",
-		"read-only": "config",
-		"op":        "tools",
-		"k9s":       "tools",
-		"lazysql":   "tools",
-		"ssh":       "tools",
-		"token":     "runtime",
-		"cache":     "runtime",
-		"audit-log": "runtime",
+		"config":            "config",
+		"read-only":         "config",
+		"op":                "tools",
+		"k9s":               "tools",
+		"lazysql":           "tools",
+		"ssh":               "tools",
+		"token":             "runtime",
+		"cache":             "runtime",
+		"audit-log":         "runtime",
 		"refresh":           "runtime",
 		"refresh-collision": "runtime",
 
