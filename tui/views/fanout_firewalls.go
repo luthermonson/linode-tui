@@ -27,13 +27,13 @@ func newFanoutFirewalls(d Deps) View {
 		Deps:    d,
 		Title:   "Firewalls (all accounts)",
 		Refresh: fanoutDefaultRefresh,
-		Columns: []table.Column{
-			{Title: "ACCOUNT", Width: 12},
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 30},
-			{Title: "STATUS", Width: 12},
-			{Title: "ENTITIES", Width: 10},
-			{Title: "TAGS", Width: 24},
+		Columns: []Col{
+			{Title: "ACCOUNT", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 30, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "ENTITIES", Width: 10, MinWidth: 6, Priority: PriMed},
+			{Title: "TAGS", Width: 24, MinWidth: 8, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, _ *linode.Client) ([]FanoutFirewall, error) {
 			return fanoutFirewalls(ctx, d)

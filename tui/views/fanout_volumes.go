@@ -38,14 +38,14 @@ func newFanoutVolumes(d Deps) View {
 		Deps:    d,
 		Title:   "Volumes (all accounts)",
 		Refresh: fanoutDefaultRefresh,
-		Columns: []table.Column{
-			{Title: "ACCOUNT", Width: 12},
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 28},
-			{Title: "REGION", Width: 14},
-			{Title: "STATUS", Width: 12},
-			{Title: "SIZE", Width: 8},
-			{Title: "LINODE", Width: 20},
+		Columns: []Col{
+			{Title: "ACCOUNT", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 28, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "SIZE", Width: 8, MinWidth: 5, Priority: PriMed},
+			{Title: "LINODE", Width: 20, MinWidth: 10, Priority: PriLow},
 		},
 		Lister: func(ctx context.Context, _ *linode.Client) ([]FanoutVolume, error) {
 			return fanoutVolumes(ctx, d)

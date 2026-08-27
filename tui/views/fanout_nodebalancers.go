@@ -26,13 +26,13 @@ func newFanoutNodeBalancers(d Deps) View {
 		Deps:    d,
 		Title:   "NodeBalancers (all accounts)",
 		Refresh: fanoutDefaultRefresh,
-		Columns: []table.Column{
-			{Title: "ACCOUNT", Width: 12},
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 26},
-			{Title: "REGION", Width: 14},
-			{Title: "HOSTNAME", Width: 40},
-			{Title: "IPv4", Width: 16},
+		Columns: []Col{
+			{Title: "ACCOUNT", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 26, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "HOSTNAME", Width: 40, MinWidth: 16, Priority: PriLowest},
+			{Title: "IPv4", Width: 16, MinWidth: 12, Priority: PriLow},
 		},
 		Lister: func(ctx context.Context, _ *linode.Client) ([]FanoutNodeBalancer, error) {
 			return fanoutNodeBalancers(ctx, d)

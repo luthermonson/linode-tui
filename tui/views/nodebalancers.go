@@ -21,13 +21,13 @@ func newNodeBalancers(d Deps) View {
 	return newListView(listOpts[linodego.NodeBalancer]{
 		Deps:  d,
 		Title: "NodeBalancers",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 28},
-			{Title: "REGION", Width: 14},
-			{Title: "HOSTNAME", Width: 40},
-			{Title: "IPv4", Width: 16},
-			{Title: "TAGS", Width: 20},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 28, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "HOSTNAME", Width: 40, MinWidth: 16, Priority: PriLow},
+			{Title: "IPv4", Width: 16, MinWidth: 12, Priority: PriLow},
+			{Title: "TAGS", Width: 20, MinWidth: 8, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.NodeBalancer, error) {
 			return c.Raw().ListNodeBalancers(ctx, nil)

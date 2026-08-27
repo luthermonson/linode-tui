@@ -21,13 +21,14 @@ func newObjectStorage(d Deps) View {
 	return newListView(listOpts[linodego.ObjectStorageBucket]{
 		Deps:  d,
 		Title: "Object Storage",
-		Columns: []table.Column{
-			{Title: "LABEL", Width: 30},
-			{Title: "REGION", Width: 14},
-			{Title: "ENDPOINT", Width: 12},
-			{Title: "HOSTNAME", Width: 40},
-			{Title: "OBJECTS", Width: 10},
-			{Title: "SIZE", Width: 10},
+		Columns: []Col{
+			// Buckets have no numeric id — LABEL is the identity column here.
+			{Title: "LABEL", Width: 30, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriPinned},
+			{Title: "ENDPOINT", Width: 12, MinWidth: 8, Priority: PriLow},
+			{Title: "HOSTNAME", Width: 40, MinWidth: 16, Priority: PriLowest},
+			{Title: "OBJECTS", Width: 10, MinWidth: 7, Priority: PriHigh},
+			{Title: "SIZE", Width: 10, MinWidth: 5, Priority: PriMed},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.ObjectStorageBucket, error) {
 			return c.Raw().ListObjectStorageBuckets(ctx, nil)
