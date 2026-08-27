@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -49,7 +50,7 @@ func doctorCommand() *cli.Command {
 			},
 			&cli.StringSliceFlag{
 				Name:  "section",
-				Usage: "run only the named check(s): config, read-only, stale-cache, op, k9s, lazysql, ssh, token (repeatable)",
+				Usage: "run only the named check(s): config, read-only, stale-cache, op, k9s, lazysql, ssh, token, layout-digests, refresh (repeatable)",
 			},
 			&cli.StringSliceFlag{
 				Name:  "group",
@@ -118,6 +119,33 @@ var doctorGroupByName = map[string]string{
 	"layout-digests": "layout",
 	"refresh":        "runtime",
 }
+
+// doctorSectionNames and doctorGroupNames are the full set of names a
+// --section/--group flag may name, derived from doctorGroupByName so they
+// can never drift from the checks that actually produce results. Used to
+// reject unknown names outright instead of silently filtering everything
+// out (which used to print "ok" and exit 0 for a typo'd name).
+var doctorSectionNames = func() []string {
+	names := make([]string, 0, len(doctorGroupByName))
+	for name := range doctorGroupByName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}()
+
+var doctorGroupNames = func() []string {
+	seen := map[string]bool{}
+	for _, g := range doctorGroupByName {
+		seen[g] = true
+	}
+	names := make([]string, 0, len(seen))
+	for g := range seen {
+		names = append(names, g)
+	}
+	sort.Strings(names)
+	return names
+}()
 
 func runDoctor(ctx context.Context, c *cli.Command, out io.Writer) error {
 	var results []checkResult
@@ -285,6 +313,17 @@ func runDoctor(ctx context.Context, c *cli.Command, out io.Writer) error {
 	}
 
 	if len(sections) > 0 {
+		var unknown []string
+		for s := range sections {
+			if !slices.Contains(doctorSectionNames, s) {
+				unknown = append(unknown, s)
+			}
+		}
+		if len(unknown) > 0 {
+			sort.Strings(unknown)
+			return fmt.Errorf("unknown --section name(s): %s (valid: %s)",
+				strings.Join(unknown, ", "), strings.Join(doctorSectionNames, ", "))
+		}
 		filtered := results[:0]
 		for _, r := range results {
 			if sections[r.name] {
@@ -295,8 +334,17 @@ func runDoctor(ctx context.Context, c *cli.Command, out io.Writer) error {
 	}
 	if groups := c.StringSlice("group"); len(groups) > 0 {
 		wanted := map[string]bool{}
+		var unknown []string
 		for _, g := range groups {
 			wanted[g] = true
+			if !slices.Contains(doctorGroupNames, g) {
+				unknown = append(unknown, g)
+			}
+		}
+		if len(unknown) > 0 {
+			sort.Strings(unknown)
+			return fmt.Errorf("unknown --group name(s): %s (valid: %s)",
+				strings.Join(unknown, ", "), strings.Join(doctorGroupNames, ", "))
 		}
 		filtered := results[:0]
 		for _, r := range results {

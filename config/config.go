@@ -70,9 +70,9 @@ type Config struct {
 	// Fold breakpoints — override the built-in width/height thresholds that
 	// hide the secondary, tertiary, and quaternary panes when the terminal
 	// is small.
-	FoldWidthSecondary    int `yaml:"fold_width_secondary,omitempty"`    // default 80
-	FoldWidthTertiary     int `yaml:"fold_width_tertiary,omitempty"`     // default 120
-	FoldHeightQuaternary  int `yaml:"fold_height_quaternary,omitempty"`  // default 30
+	FoldWidthSecondary   int `yaml:"fold_width_secondary,omitempty"`   // default 80
+	FoldWidthTertiary    int `yaml:"fold_width_tertiary,omitempty"`    // default 120
+	FoldHeightQuaternary int `yaml:"fold_height_quaternary,omitempty"` // default 30
 	// FoldChar prefixes folded pane names in the divider (default "+").
 	FoldChar string `yaml:"fold_char,omitempty"`
 	// Layouts is a map of user-saved pane layouts (`:layout save <name>`).
@@ -382,7 +382,7 @@ func (c *Config) ApplyOverrides(o Overrides) {
 	c.debug = o.Debug
 }
 
-func (c *Config) Debug() bool { return c.debug }
+func (c *Config) Debug() bool  { return c.debug }
 func (c *Config) Path() string { return c.path }
 
 // Save serializes the config to disk. It is safe to call concurrently, never

@@ -27,8 +27,8 @@ repos:
         pass_filenames: false
 
       - id: gotest
-        name: go test -short
-        entry: go test -short ./...
+        name: go test
+        entry: go test ./...
         language: system
         types: [go]
         pass_filenames: false

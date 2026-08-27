@@ -1,10 +1,11 @@
 // Package cache provides small helpers for inspecting the
 // ~/.cache/linode-tui directory: byte sizes per subdir and a human-readable
-// byte formatter. Lives here so CLI (`linode-tui cache size`) and TUI
-// (`:cache size`) share one implementation.
+// byte formatter. Backs the in-TUI `:cache size` / `:cache prune` verbs and
+// the `cache` check in `linode-tui doctor`.
 package cache
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,9 +23,15 @@ func Root() (string, error) {
 // SubdirSizes returns the byte size of every immediate subdirectory of root
 // (and "_" for files at the root). Missing root is not an error — returns an
 // empty map. Returns the total across all entries.
+//
+// Per-entry stat/walk failures (permission errors, races with concurrent
+// writers, etc.) are collected and returned via errors.Join rather than
+// discarded, so a caller like `:cache size` can surface that its total is a
+// lower bound instead of silently under-reporting.
 func SubdirSizes(root string) (map[string]int64, int64, error) {
 	out := map[string]int64{}
 	var total int64
+	var walkErrs []error
 	entries, err := os.ReadDir(root)
 	if os.IsNotExist(err) {
 		return out, 0, nil
@@ -35,26 +42,39 @@ func SubdirSizes(root string) (map[string]int64, int64, error) {
 	for _, e := range entries {
 		path := filepath.Join(root, e.Name())
 		if !e.IsDir() {
-			if info, err := e.Info(); err == nil {
-				out["_"] += info.Size()
-				total += info.Size()
+			info, err := e.Info()
+			if err != nil {
+				walkErrs = append(walkErrs, fmt.Errorf("%s: %w", path, err))
+				continue
 			}
+			out["_"] += info.Size()
+			total += info.Size()
 			continue
 		}
 		var sz int64
-		_ = filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
+		walkErr := filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+			if err != nil {
+				walkErrs = append(walkErrs, fmt.Errorf("%s: %w", p, err))
 				return nil
 			}
-			if info, err := d.Info(); err == nil {
-				sz += info.Size()
+			if d.IsDir() {
+				return nil
 			}
+			info, err := d.Info()
+			if err != nil {
+				walkErrs = append(walkErrs, fmt.Errorf("%s: %w", p, err))
+				return nil
+			}
+			sz += info.Size()
 			return nil
 		})
+		if walkErr != nil {
+			walkErrs = append(walkErrs, walkErr)
+		}
 		out[e.Name()] = sz
 		total += sz
 	}
-	return out, total, nil
+	return out, total, errors.Join(walkErrs...)
 }
 
 // Total returns the byte size of everything under root. Missing root is not

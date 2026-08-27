@@ -11,8 +11,6 @@ import (
 	"github.com/luthermonson/linode-tui/linode"
 )
 
-
-
 func init() {
 	Register("objectstorage", []string{"obj", "buckets", "bucket", "s3"}, newObjectStorage)
 }

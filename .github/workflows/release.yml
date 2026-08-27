@@ -16,23 +16,24 @@ jobs:
     name: goreleaser
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # GoReleaser needs the full history and all tags to build the
           # changelog and derive the version.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
           cache: true
 
       # .goreleaser.yml generates SPDX SBOMs, which shells out to `syft`.
       # It isn't preinstalled on the runner, so install it before GoReleaser
       # runs (otherwise the sbom step fails with "syft: executable file not
-      # found in $PATH").
+      # found in $PATH"). Pinned to a specific release instead of @v0 so a
+      # new syft release can't silently change SBOM output mid-flight.
       - name: Install syft (for SBOM generation)
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@v0.24.0
 
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@v6

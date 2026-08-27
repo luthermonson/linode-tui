@@ -188,4 +188,3 @@ func withExeSuffix(name string) string {
 	}
 	return name
 }
-
