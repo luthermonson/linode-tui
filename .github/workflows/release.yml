@@ -16,7 +16,7 @@ jobs:
     name: goreleaser
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # GoReleaser needs the full history and all tags to build the
           # changelog and derive the version.
