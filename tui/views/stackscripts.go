@@ -19,14 +19,14 @@ func newStackScripts(d Deps) View {
 	return newListView(listOpts[linodego.Stackscript]{
 		Deps:  d,
 		Title: "StackScripts",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "USERNAME", Width: 18},
-			{Title: "LABEL", Width: 30},
-			{Title: "PUBLIC", Width: 8},
-			{Title: "MINE", Width: 6},
-			{Title: "DEPLOY", Width: 8},
-			{Title: "REV NOTE", Width: 32},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "USERNAME", Width: 18, MinWidth: 8, Priority: PriMed},
+			{Title: "LABEL", Width: 30, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "PUBLIC", Width: 8, MinWidth: 6, Priority: PriLow},
+			{Title: "MINE", Width: 6, MinWidth: 4, Priority: PriHigh},
+			{Title: "DEPLOY", Width: 8, MinWidth: 6, Priority: PriLow},
+			{Title: "REV NOTE", Width: 32, MinWidth: 12, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.Stackscript, error) {
 			return c.Raw().ListStackscripts(ctx, nil)

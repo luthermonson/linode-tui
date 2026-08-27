@@ -19,14 +19,14 @@ func newImages(d Deps) View {
 	return newListView(listOpts[linodego.Image]{
 		Deps:  d,
 		Title: "Images",
-		Columns: []table.Column{
-			{Title: "ID", Width: 28},
-			{Title: "LABEL", Width: 30},
-			{Title: "TYPE", Width: 10},
-			{Title: "STATUS", Width: 12},
-			{Title: "VENDOR", Width: 14},
-			{Title: "SIZE", Width: 8},
-			{Title: "PUBLIC", Width: 8},
+		Columns: []Col{
+			{Title: "ID", Width: 28, MinWidth: 12, Priority: PriPinned},
+			{Title: "LABEL", Width: 30, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "TYPE", Width: 10, MinWidth: 6, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "VENDOR", Width: 14, MinWidth: 8, Priority: PriLow},
+			{Title: "SIZE", Width: 8, MinWidth: 5, Priority: PriMed},
+			{Title: "PUBLIC", Width: 8, MinWidth: 6, Priority: PriLow},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.Image, error) {
 			return c.Raw().ListImages(ctx, nil)

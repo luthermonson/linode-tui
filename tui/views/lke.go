@@ -25,15 +25,15 @@ func newLKE(d Deps) View {
 	return newListView(listOpts[linodego.LKECluster]{
 		Deps:  d,
 		Title: "LKE Clusters",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 30},
-			{Title: "REGION", Width: 14},
-			{Title: "STATUS", Width: 12},
-			{Title: "K8S", Width: 10},
-			{Title: "TIER", Width: 10},
-			{Title: "HA", Width: 6},
-			{Title: "TAGS", Width: 20},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 30, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "K8S", Width: 10, MinWidth: 6, Priority: PriMed},
+			{Title: "TIER", Width: 10, MinWidth: 6, Priority: PriLow},
+			{Title: "HA", Width: 6, MinWidth: 3, Priority: PriLow},
+			{Title: "TAGS", Width: 20, MinWidth: 8, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.LKECluster, error) {
 			return c.Raw().ListLKEClusters(ctx, nil)

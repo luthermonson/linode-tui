@@ -19,12 +19,12 @@ func newVPCs(d Deps) View {
 	return newListView(listOpts[linodego.VPC]{
 		Deps:  d,
 		Title: "VPCs",
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 30},
-			{Title: "REGION", Width: 14},
-			{Title: "SUBNETS", Width: 10},
-			{Title: "DESCRIPTION", Width: 40},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 30, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "SUBNETS", Width: 10, MinWidth: 7, Priority: PriHigh},
+			{Title: "DESCRIPTION", Width: 40, MinWidth: 14, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.VPC, error) {
 			return c.Raw().ListVPCs(ctx, nil)

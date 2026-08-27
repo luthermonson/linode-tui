@@ -26,14 +26,14 @@ func newFanoutLKE(d Deps) View {
 	return newListView(listOpts[FanoutLKE]{
 		Deps:  d,
 		Title: "LKE Clusters (all accounts)",
-		Columns: []table.Column{
-			{Title: "ACCOUNT", Width: 12},
-			{Title: "ID", Width: 10},
-			{Title: "LABEL", Width: 28},
-			{Title: "REGION", Width: 14},
-			{Title: "STATUS", Width: 12},
-			{Title: "K8S", Width: 10},
-			{Title: "TIER", Width: 10},
+		Columns: []Col{
+			{Title: "ACCOUNT", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 28, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 14, MinWidth: 8, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "K8S", Width: 10, MinWidth: 6, Priority: PriMed},
+			{Title: "TIER", Width: 10, MinWidth: 6, Priority: PriLow},
 		},
 		Lister: func(ctx context.Context, _ *linode.Client) ([]FanoutLKE, error) {
 			return fanoutLKEClusters(ctx, d)

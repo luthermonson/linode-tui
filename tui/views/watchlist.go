@@ -41,15 +41,17 @@ func newWatchlist(d Deps) View {
 	return newListView(listOpts[WatchlistRow]{
 		Deps:  d,
 		Title: "Watchlist",
-		Columns: []table.Column{
-			{Title: "KIND", Width: 14},
-			{Title: "ID", Width: 12},
-			{Title: "LABEL", Width: 28},
-			{Title: "REGION", Width: 12},
-			{Title: "STATUS", Width: 12},
-			{Title: "★ AGE", Width: 8},
-			{Title: "Δ", Width: 2},
-			{Title: "TAGS", Width: 20},
+		Columns: []Col{
+			// KIND is pinned here — an id alone is meaningless on a
+			// cross-resource list.
+			{Title: "KIND", Width: 14, MinWidth: 8, Priority: PriPinned},
+			{Title: "ID", Width: 12, MinWidth: 6, Priority: PriPinned},
+			{Title: "LABEL", Width: 28, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "REGION", Width: 12, MinWidth: 8, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "★ AGE", Width: 8, MinWidth: 5, Priority: PriLow},
+			{Title: "Δ", Width: 2, MinWidth: 2, Priority: PriHigh},
+			{Title: "TAGS", Width: 20, MinWidth: 8, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, _ *linode.Client) ([]WatchlistRow, error) {
 			if d.Cfg == nil {
@@ -83,7 +85,46 @@ func newWatchlist(d Deps) View {
 				}
 			}
 		},
+		// The watchlist has no single BookmarkKind — every row carries its
+		// own — so listView's generic `*` can't express the toggle. This
+		// handler makes the one view that lists your bookmarks able to remove
+		// them, which is where you'd reach for it first.
+		KeyHandlers: map[string]func(WatchlistRow, Deps) tea.Cmd{
+			"*": unstarWatchlistRow,
+		},
+		KeyHelp: map[string]string{
+			"*": "unstar: drop this row's bookmark",
+		},
 	})
+}
+
+// unstarWatchlistRow removes r from the bookmarks of its own kind, using the
+// same Cfg.SetBookmarks path listView.persistBookmarks uses, and drops the
+// captured snapshot so a re-star starts from a fresh baseline.
+func unstarWatchlistRow(r WatchlistRow, d Deps) tea.Cmd {
+	if d.Cfg == nil {
+		return func() tea.Msg { return ErrorMsg{Err: fmt.Errorf("no config loaded — can't unstar")} }
+	}
+	ids := d.Cfg.ActiveBookmarks()[r.Kind]
+	kept := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != r.ID {
+			kept = append(kept, id)
+		}
+	}
+	if len(kept) == len(ids) {
+		return func() tea.Msg { return ErrorMsg{Err: fmt.Errorf("%s %s isn't bookmarked", r.Kind, r.ID)} }
+	}
+	if len(kept) == 0 {
+		d.Cfg.SetBookmarks(r.Kind, nil)
+	} else {
+		d.Cfg.SetBookmarks(r.Kind, kept)
+	}
+	_ = d.Cfg.Save()
+	removeSnapshot(r.Kind, r.ID)
+	label := fmt.Sprintf("unstarred %s %s", r.Kind, r.ID)
+	// ActionDoneMsg forces the reload that drops the row from the list.
+	return func() tea.Msg { return ActionDoneMsg{Label: label} }
 }
 
 // fetchWatchlist fans out across the kinds that have bookmarks, fetches each

@@ -26,13 +26,13 @@ func newFanoutDomains(d Deps) View {
 	return newListView(listOpts[FanoutDomain]{
 		Deps:  d,
 		Title: "Domains (all accounts)",
-		Columns: []table.Column{
-			{Title: "ACCOUNT", Width: 12},
-			{Title: "ID", Width: 10},
-			{Title: "DOMAIN", Width: 32},
-			{Title: "TYPE", Width: 10},
-			{Title: "STATUS", Width: 12},
-			{Title: "SOA EMAIL", Width: 28},
+		Columns: []Col{
+			{Title: "ACCOUNT", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "DOMAIN", Width: 32, MinWidth: 14, Priority: PriPinned, Flex: true},
+			{Title: "TYPE", Width: 10, MinWidth: 6, Priority: PriMed},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "SOA EMAIL", Width: 28, MinWidth: 12, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, _ *linode.Client) ([]FanoutDomain, error) {
 			return fanoutDomains(ctx, d)

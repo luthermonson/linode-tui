@@ -20,15 +20,17 @@ func newEvents(d Deps) View {
 		Deps:    d,
 		Title:   "Events",
 		Refresh: 5 * time.Second,
-		Columns: []table.Column{
-			{Title: " ", Width: 2},
-			{Title: "ID", Width: 12},
-			{Title: "ACTION", Width: 24},
-			{Title: "STATUS", Width: 12},
-			{Title: "USER", Width: 16},
-			{Title: "ENTITY", Width: 28},
-			{Title: "%", Width: 4},
-			{Title: "MESSAGE", Width: 40},
+		Columns: []Col{
+			// Leading severity glyph; pinned because it's the fastest read on
+			// the whole view and costs 2 cells.
+			{Title: " ", Width: 2, MinWidth: 2, Priority: PriPinned},
+			{Title: "ID", Width: 12, MinWidth: 6, Priority: PriPinned},
+			{Title: "ACTION", Width: 24, MinWidth: 12, Priority: PriPinned, Flex: true},
+			{Title: "STATUS", Width: 12, MinWidth: 8, Priority: PriHigh},
+			{Title: "USER", Width: 16, MinWidth: 8, Priority: PriLow},
+			{Title: "ENTITY", Width: 28, MinWidth: 12, Priority: PriMed},
+			{Title: "%", Width: 4, MinWidth: 3, Priority: PriLow},
+			{Title: "MESSAGE", Width: 40, MinWidth: 16, Priority: PriLowest},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.Event, error) {
 			return c.Raw().ListEvents(ctx, nil)

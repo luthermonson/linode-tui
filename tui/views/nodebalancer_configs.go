@@ -25,14 +25,14 @@ func newNodeBalancerConfigs(d Deps) View {
 	return newListView(listOpts[linodego.NodeBalancerConfig]{
 		Deps:  d,
 		Title: title,
-		Columns: []table.Column{
-			{Title: "ID", Width: 10},
-			{Title: "PORT", Width: 6},
-			{Title: "PROTO", Width: 8},
-			{Title: "ALGORITHM", Width: 12},
-			{Title: "STICKINESS", Width: 12},
-			{Title: "CHECK", Width: 10},
-			{Title: "PATH", Width: 24},
+		Columns: []Col{
+			{Title: "ID", Width: 10, MinWidth: 6, Priority: PriPinned},
+			{Title: "PORT", Width: 6, MinWidth: 5, Priority: PriPinned},
+			{Title: "PROTO", Width: 8, MinWidth: 5, Priority: PriHigh},
+			{Title: "ALGORITHM", Width: 12, MinWidth: 9, Priority: PriMed},
+			{Title: "STICKINESS", Width: 12, MinWidth: 10, Priority: PriLow},
+			{Title: "CHECK", Width: 10, MinWidth: 5, Priority: PriLow},
+			{Title: "PATH", Width: 24, MinWidth: 10, Priority: PriLowest, Flex: true},
 		},
 		Lister: func(ctx context.Context, c *linode.Client) ([]linodego.NodeBalancerConfig, error) {
 			if nbID == 0 {
