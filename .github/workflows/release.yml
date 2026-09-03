@@ -33,7 +33,7 @@ jobs:
       # found in $PATH"). Pinned to a specific release instead of @v0 so a
       # new syft release can't silently change SBOM output mid-flight.
       - name: Install syft (for SBOM generation)
-        uses: anchore/sbom-action/download-syft@v0.24.0
+        uses: anchore/sbom-action/download-syft@v0.24.2
 
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@v7
